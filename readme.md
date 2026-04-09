@@ -4,8 +4,7 @@
 [![GitHub Release](https://img.shields.io/github/v/release/chenweiliang6/William-Player)](https://github.com/chenweiliang6/William-Player/releases/latest)
 ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/chenweiliang6/William-Player/total)
 # William Player
-一款适配📱 Android Phone、Android TV和Windows 的视频播放器，支持云播放(天翼云盘、夸克网盘和Webdav)，支持刮削影视元信息，播放视频等功能。界面简洁纯净，操作简单。如果您是开发者，想要自己打包app，请参考
-[开发者文档](https://github.com/chenweiliang6/William-Player/blob/master/readpack.md)
+一款适配📱 Android Phone、Android TV和Windows 的视频播放器，支持云播放(天翼云盘、夸克网盘和Webdav)，支持刮削影视元信息，播放视频等功能。界面简洁纯净，操作简单。
 
 ---
 
@@ -15,7 +14,7 @@
 
 对于App使用有问题或者建议的，大家可以进交流群一起交流。
 
-项目如果跑不起来的话，就在/utils下创建config.js，从develop分支获取/utils/config.js的代码。获取进qq群联系我寻求帮助。
+项目如果跑不起来的话，就在/utils下创建config.js，从develop分支获取/utils/config.js的代码。或者进qq群联系我寻求帮助。
 
 <img src="https://gitee.com/waylon-chen/image-hosting/raw/master/img/qq-group.jpg" alt="Sponsor" width="240"/>
 

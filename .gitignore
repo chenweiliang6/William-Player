@@ -11,7 +11,7 @@ node_modules
 .DS_Store
 dist
 *.local
-/src/utils/config.js
+# /src/utils/config.js
 /src/unpackage
 unpackage
 nativeplugins
