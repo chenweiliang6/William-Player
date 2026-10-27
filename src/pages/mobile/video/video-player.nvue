@@ -68,6 +68,7 @@ import tvSelect from './components/player-component/tv-select.nvue'
 import tvButton from './components/player-component/tv-button.nvue'
 import { addOperLog } from '@/network/apis'
 import { getWebDAVUrl, get189VideoUrl, loginUser, getQuarkResolutionUrl, getQuarkVideoUrl, getFolder, getTvSeason, get189Folder, getQuarkFolder } from '@/utils/common'
+import { sortVideoList, filterVideoFormat } from '@/utils/player-common'
 import { calTime, handleSeasonName, generateChineseNumberMapping } from '@/utils/scrape'
 import { getEmbyPlayerUrl } from '@/utils/emby'
 import { IMG_DOMAIN } from '@/utils/config'
@@ -83,7 +84,6 @@ export default {
     return {
       // 常量
       VIDEO_HEIGHT: '580rpx',
-      VIDEO_FORMAT: ['mp4', 'mkv', 'm2ts', 'avi', 'mov', 'ts', 'm3u8', 'iso'],
       IOS_SAVE_INTERVAL: 5, // iOS 每 5 次更新一次历史记录
 
       historyPlay: [],
@@ -133,27 +133,12 @@ export default {
   methods: {
     // 视频列表排序
     sortVideoList(list, nameKey = 'name') {
-      const regex = /S\d{2}E\d{2}/
-      const regex1 = /\d+/
-      return list.sort((a, b) => {
-        const nameA = a[nameKey]
-        const nameB = b[nameKey]
-        const matchA = nameA.match(regex) || nameA.match(regex1)
-        const matchB = nameB.match(regex) || nameB.match(regex1)
-        if (matchA && matchB) {
-          const numA = parseInt(matchA[0].slice(-2), 10)
-          const numB = parseInt(matchB[0].slice(-2), 10)
-          a.ji = numA
-          b.ji = numB
-          return numA - numB
-        }
-        return 0
-      })
+      return sortVideoList(list, nameKey)
     },
 
     // 过滤视频格式
     filterVideoFormat(list, nameKey = 'name') {
-      return list.filter(item => this.VIDEO_FORMAT.some(v => item[nameKey].includes(v)))
+      return filterVideoFormat(list, nameKey)
     },
 
     //判断选择的是webdav还是天翼云盘还是夸克
@@ -201,8 +186,6 @@ export default {
           //   this.selectMedia
           // )
           let res = await getQuarkVideoUrl({ folderFileId: this.routerParams.folderFileId }, this.selectMedia)
-          console.log(res.data[0].download_url, 'res1111')
-
           return res
         }
       } else if (this.selectType.type == 'Emby') {

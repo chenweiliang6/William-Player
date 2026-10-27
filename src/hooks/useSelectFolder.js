@@ -68,8 +68,6 @@ export function useSelectFolder({ selectType, selectMedia, result, title, catalo
         path.value = removeLastSegment(path.value)
         key.value === '1' ? (key.value = '2') : (key.value = '1')
       } else {
-        console.log(isTip,'istup');
-        
         if (isTip) {
           uni.showToast({
             title: t('source.reachedTopDirectory'),
@@ -101,7 +99,7 @@ export function useSelectFolder({ selectType, selectMedia, result, title, catalo
 
   const getFileList = async data => {
     if (unref(selectType).type == 'WebDAV') {
-      isInit.value ? (isInit.value = false) : '' //webdav需要请求接口，其他两个直接从那边传值过来
+      if (isInit.value) isInit.value = false //webdav需要请求接口，其他两个直接从那边传值过来
       return new Promise(resolve => {
         uni.request({
           url: unref(selectMedia).protocol + '://' + unref(selectMedia).address + ':' + unref(selectMedia).port + '/api/fs/list',
@@ -120,7 +118,7 @@ export function useSelectFolder({ selectType, selectMedia, result, title, catalo
         folderFileIdArr.value.push('-11')
         let result1 = JSON.parse(JSON.stringify(unref(result)))
         result1.fileListAO.fileList.forEach(v => {
-          v?.icon?.largeUrl ? (v.thumb = v.icon.largeUrl) : ''
+          if (v?.icon?.largeUrl) v.thumb = v.icon.largeUrl
           v.type = 0
           v.folderFileId = v.id
         })
@@ -132,7 +130,7 @@ export function useSelectFolder({ selectType, selectMedia, result, title, catalo
       }
       let res = await get189Folder({ ...data, folderId: folderFileId.value }, unref(selectMedia))
       res.fileListAO.fileList.forEach(v => {
-        v?.icon?.largeUrl ? (v.thumb = v.icon.largeUrl) : ''
+        if (v?.icon?.largeUrl) v.thumb = v.icon.largeUrl
         v.type = 0
         v.folderFileId = v.id
       })
@@ -150,7 +148,7 @@ export function useSelectFolder({ selectType, selectMedia, result, title, catalo
         result1.data.list.forEach(v => {
           v.file_type == 0 ? (v.type = 1) : (v.type = 0)
           v.name = v.file_name
-          v.big_thumbnail ? (v.thumb = v.big_thumbnail) : ''
+          if (v.big_thumbnail) v.thumb = v.big_thumbnail
           v.folderFileId = v.fid
         })
         return { data: { content: result1.data.list, total: result1.metadata._total } }
@@ -159,7 +157,7 @@ export function useSelectFolder({ selectType, selectMedia, result, title, catalo
       res.data.list.forEach(v => {
         v.file_type == 0 ? (v.type = 1) : (v.type = 0)
         v.name = v.file_name
-        v.big_thumbnail ? (v.thumb = v.big_thumbnail) : ''
+        if (v.big_thumbnail) v.thumb = v.big_thumbnail
         v.folderFileId = v.fid
       })
       return { data: { content: res.data.list, total: res.metadata._total } }
@@ -227,15 +225,6 @@ export function useSelectFolder({ selectType, selectMedia, result, title, catalo
         muluData.value[currentCatalogType].push({ type: unref(selectType).type, name: unref(selectMedia).name, path: path.value + '/' + selectName.value || '/' })
       }
     } else {
-      // let exit = muluData.value[getCatalogType(unref(title))].find(v => v.type == unref(selectType).type && v.name == unref(selectMedia).name)
-      // //已存在就替换，不存在就新增
-      // if (exit) {
-      //     exit.path = path.value + '/' + selectName.value || '/'
-      //     exit.folderFileId = folderFileId.value
-      // } else {
-      //     let obj = { type: unref(selectType).type, name: unref(selectMedia).name, path: path.value + '/' + selectName.value || '/', folderFileId: folderFileId.value }
-      //     muluData.value[getCatalogType(unref(title))].push(obj)
-      // }
       const currentCatalogType = getCatalogType(unref(catalogType) || unref(title))
       let exit = muluData.value[currentCatalogType]?.find(
         v =>
@@ -251,14 +240,13 @@ export function useSelectFolder({ selectType, selectMedia, result, title, catalo
         muluData.value[currentCatalogType].push(obj)
       }
     }
-    console.log(muluData.value)
     uni.setStorageSync('muluData', muluData.value)
     emits('confirm', muluData.value)
   }
   onBeforeMount(() => {
     muluData.value = uni.getStorageSync('muluData') || {}
-    muluData.value?.tv ? '' : (muluData.value.tv = [])
-    muluData.value?.movie ? '' : (muluData.value.movie = [])
+    if (!muluData.value.tv) muluData.value.tv = []
+    if (!muluData.value.movie) muluData.value.movie = []
   })
   return {
     data,

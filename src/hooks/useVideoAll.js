@@ -8,6 +8,7 @@ import * as CONFIG from '@/utils/config'
 import { getEmbyList, getGenresList } from '../utils/emby'
 import dayjs from 'dayjs'
 import { useI18n } from 'vue-i18n'
+import { useSourceSelect } from '@/hooks/useSourceSelect'
 
 export function useVideoAll({ wil_list, route = null }) {
   const { t } = useI18n()
@@ -47,17 +48,35 @@ export function useVideoAll({ wil_list, route = null }) {
     wil_list.value.reload()
   }
   //判断选择的是webdav还是天翼云盘还是夸克
-  const judgeSelect = () => {
-    let sourceList = uni.getStorageSync('sourceList')
-    selectType.value = sourceList.find(item => {
-      let select = item.list.find(i => i.active)
-      if (select) {
-        selectMedia.value = select
-        return true
-      } else {
-        return false
-      }
+  const { judgeSelect } = useSourceSelect({ selectType, selectMedia })
+
+  //emby分页请求的公共参数，差异项通过 overrides 合并
+  const buildEmbyParams = (params, overrides = {}) => {
+    return {
+      ParentId: routerParams.value.embyParentId,
+      EnableImageTypes: 'Primary,Backdrop,Thumb',
+      Fields: 'BasicSyncInfo,CanDelete,Container,PrimaryImageAspectRatio,ProductionYear,Status,EndDate,Prefix',
+      SortBy: 'SortName',
+      SortOrder: 'Ascending',
+      StartIndex: (params.pageNum - 1) * params.pageSize,
+      Limit: params.pageSize,
+      Recursive: true,
+      ImageTypeLimit: '1',
+      ...overrides,
+    }
+  }
+
+  //emby响应统一映射为列表组件需要的结构
+  const mapEmbyItems = (res, mapItem) => {
+    let arr = res.Items.map(mapItem)
+    arr.forEach(item => {
+      item.loadImg = true
     })
+    return {
+      code: '200',
+      rows: arr,
+      total: res.TotalRecordCount,
+    }
   }
   const removeExtension = item => {
     const firstDotIndex = item.name.indexOf('.')
@@ -81,121 +100,55 @@ export function useVideoAll({ wil_list, route = null }) {
   }
   //emby获取剧集列表
   const getEmbyJjList = async params => {
-    let embyObj = {
-      ParentId: routerParams.value.embyParentId,
-      EnableImageTypes: 'Primary,Backdrop,Thumb',
-      Fields: 'BasicSyncInfo,CanDelete,Container,PrimaryImageAspectRatio,ProductionYear,Status,EndDate,Prefix',
-      SortBy: 'SortName',
-      SortOrder: 'Ascending',
-      StartIndex: (params.pageNum - 1) * params.pageSize,
-      Limit: params.pageSize,
-      IncludeItemTypes: routerParams.value.embyIncludeItemTypes,
-      Recursive: true,
-      ImageTypeLimit: '1',
-    }
+    let embyObj = buildEmbyParams(params, { IncludeItemTypes: routerParams.value.embyIncludeItemTypes })
     let res = await getEmbyList(embyObj, selectMedia.value)
-    let arr = res.Items.map(i => {
-      return {
-        id: i.Id,
-        name: i.Name,
-        provider: 'Emby',
-        releaseTime: dayjs(i.EndDate).format('YYYY-MM-DD'),
-        type: i.Type,
-        poster: setEmbyImg(i),
-      }
-    })
-    arr.forEach(item => {
-      item.loadImg = true
-    })
-    return {
-      code: '200',
-      rows: arr,
-      total: res.TotalRecordCount,
-    }
+    return mapEmbyItems(res, i => ({
+      id: i.Id,
+      name: i.Name,
+      provider: 'Emby',
+      releaseTime: dayjs(i.EndDate).format('YYYY-MM-DD'),
+      type: i.Type,
+      poster: setEmbyImg(i),
+    }))
   }
   //emby获取流派列表
   const getEmbyGenreList = async params => {
-    let embyObj = {
-      ParentId: routerParams.value.embyParentId,
-      EnableImageTypes: 'Primary,Backdrop,Thumb',
-      Fields: 'BasicSyncInfo,CanDelete,Container,PrimaryImageAspectRatio,ProductionYear,Status,EndDate,Prefix',
-      SortBy: 'SortName',
-      SortOrder: 'Ascending',
-      StartIndex: (params.pageNum - 1) * params.pageSize,
-      Limit: params.pageSize,
+    let embyObj = buildEmbyParams(params, {
       IncludeItemTypes: routerParams.value.embyIncludeItemTypes,
-      Recursive: true,
-      ImageTypeLimit: '1',
       userId: selectMedia.value.userId,
-    }
+    })
     let res = await getGenresList(embyObj, selectMedia.value)
-    let arr = res.Items.map(i => {
-      return {
-        id: i.Id,
-        name: i.Name,
-        provider: 'Emby',
-        notShowTime: true,
-        type: i.Type,
-        poster: setEmbyImg(i),
-      }
-    })
-    arr.forEach(item => {
-      item.loadImg = true
-    })
-    return {
-      code: '200',
-      rows: arr,
-      total: res.TotalRecordCount,
-    }
+    return mapEmbyItems(res, i => ({
+      id: i.Id,
+      name: i.Name,
+      provider: 'Emby',
+      notShowTime: true,
+      type: i.Type,
+      poster: setEmbyImg(i),
+    }))
   }
   //获取流派下的影视列表
   const getGenreChildren = async (params, query) => {
-    let embyObj = {
-      ParentId: routerParams.value.embyParentId,
-      EnableImageTypes: 'Primary,Backdrop,Thumb',
-      Fields: 'BasicSyncInfo,CanDelete,Container,PrimaryImageAspectRatio,ProductionYear,Status,EndDate,Prefix',
-      SortBy: 'SortName',
-      SortOrder: 'Ascending',
-      StartIndex: (params.pageNum - 1) * params.pageSize,
-      Limit: params.pageSize,
-      Recursive: true,
-      ImageTypeLimit: '1',
+    let embyObj = buildEmbyParams(params, {
       userId: selectMedia.value.userId,
       ...query,
-    }
+    })
     let res = await getEmbyList(embyObj, selectMedia.value)
-    let arr = res.Items.map(i => {
-      return {
-        id: i.Id,
-        name: i.Name,
-        provider: 'Emby',
-        releaseTime: dayjs(i.EndDate).format('YYYY-MM-DD'),
-        poster: setEmbyImg(i),
-        type: i.Type,
-      }
-    })
-    arr.forEach(item => {
-      item.loadImg = true
-    })
-    return {
-      code: '200',
-      rows: arr,
-      total: res.TotalRecordCount,
-    }
+    return mapEmbyItems(res, i => ({
+      id: i.Id,
+      name: i.Name,
+      provider: 'Emby',
+      releaseTime: dayjs(i.EndDate).format('YYYY-MM-DD'),
+      poster: setEmbyImg(i),
+      type: i.Type,
+    }))
   }
   //emby获取文件夹列表
   const getEmbyFolderList = async params => {
-    let embyObj = {
-      ParentId: routerParams.value.embyParentId,
-      EnableImageTypes: 'Primary,Backdrop,Thumb',
-      Fields: 'BasicSyncInfo,CanDelete,Container,PrimaryImageAspectRatio,ProductionYear,Status,EndDate,Prefix',
+    let embyObj = buildEmbyParams(params, {
       SortBy: 'IsFolder,FileName',
-      SortOrder: 'Ascending',
-      StartIndex: (params.pageNum - 1) * params.pageSize,
-      Limit: params.pageSize,
       Recursive: false,
-      ImageTypeLimit: '1',
-    }
+    })
     let res = await getEmbyList(embyObj, selectMedia.value)
     let arr = res.Items.map(i => {
       return {
@@ -216,29 +169,23 @@ export function useVideoAll({ wil_list, route = null }) {
   const getMovieTvList = async params => {
     if (routerParams.value.type == 'emby') {
       //如果是emby，通过请求接口分页加载
-      if (routerParams.value.embyIncludeItemTypes == 'Series') {
-        if (embyActiveTabKey.value == 'episode') {
+      const includeType = routerParams.value.embyIncludeItemTypes
+      const tabKey = embyActiveTabKey.value
+      if (includeType == 'Series' || includeType == 'Movie') {
+        if (tabKey == 'episode' || tabKey == 'movie') {
           return await getEmbyJjList(params)
-        } else if (embyActiveTabKey.value == 'genre') {
+        } else if (tabKey == 'genre') {
           return await getEmbyGenreList(params)
-        } else if (embyActiveTabKey.value == 'folder') {
+        } else if (tabKey == 'folder') {
           return await getEmbyFolderList(params)
         }
-      } else if (routerParams.value.embyIncludeItemTypes == 'Movie') {
-        if (embyActiveTabKey.value == 'movie') {
-          return await getEmbyJjList(params)
-        } else if (embyActiveTabKey.value == 'genre') {
-          return await getEmbyGenreList(params)
-        } else if (embyActiveTabKey.value == 'folder') {
-          return await getEmbyFolderList(params)
-        }
-      } else if (routerParams.value.embyIncludeItemTypes == 'Genres') {
+      } else if (includeType == 'Genres') {
         if (routerParams.value.genreType == 'Series') {
           return await getGenreChildren(params, { IncludeItemTypes: 'Series', GenreIds: routerParams.value.GenreIds })
         } else if (routerParams.value.genreType == 'Movie') {
           return await getGenreChildren(params, { IncludeItemTypes: 'Movie,Series,Video', GenreIds: routerParams.value.GenreIds })
         }
-      } else if (routerParams.value.embyIncludeItemTypes == 'Folder') {
+      } else if (includeType == 'Folder') {
         return await getEmbyFolderList(params)
       }
     } else {
@@ -294,12 +241,12 @@ export function useVideoAll({ wil_list, route = null }) {
       } else if (item.type == 'Series' || item.type == 'Movie') {
         //直接跳转到剧集或者电影的详情页
         uni.navigateTo({
-          url: `/pages/${CONFIG.PLATFORM === 'TV' ? 'tv' : 'mobile'}/video/emby/emby-detail?name=${handleSeasonName(item.name, true)}&type=${item.type == 'Series' ? 'tv' : 'movie'}&movieTvId=${item.id}&isEmby=true`,
+          url: `/pages/${CONFIG.PLATFORM_DIR}/video/emby/emby-detail?name=${handleSeasonName(item.name, true)}&type=${item.type == 'Series' ? 'tv' : 'movie'}&movieTvId=${item.id}&isEmby=true`,
         })
       }
     } else {
       uni.navigateTo({
-        url: `/pages/${CONFIG.PLATFORM === 'TV' ? 'tv' : 'mobile'}/video/video-detail?path=${item.path}&name=${handleSeasonName(item.name, true)}&type=${item.type == '1' ? 'tv' : 'movie'}&source=${JSON.stringify(item.source)}&movieTvId=${item.movieTvId}`,
+        url: `/pages/${CONFIG.PLATFORM_DIR}/video/video-detail?path=${item.path}&name=${handleSeasonName(item.name, true)}&type=${item.type == '1' ? 'tv' : 'movie'}&source=${JSON.stringify(item.source)}&movieTvId=${item.movieTvId}`,
       })
     }
   }
@@ -316,9 +263,9 @@ export function useVideoAll({ wil_list, route = null }) {
     }
   }
 
-  const changeItemFn = ref(() => {})
+  let changeItemFn = () => {}
   const imgError = item => {
-    changeItemFn.value = v => {
+    changeItemFn = v => {
       v.loadImg = false
     }
     nextTick(() => {
@@ -384,7 +331,7 @@ export function useVideoAll({ wil_list, route = null }) {
     displayTitle.value = titleKey.value ? t(titleKey.value) : routerParams.value.title
     listKind.value = routerParams.value.listKind || (routerParams.value.title == '最近观看' || routerParams.value.title == t('video.recentPlayed') ? 'recent' : 'all')
     routerParams.value.isConnected = routerParams.value.isConnected1 == 'true' ? true : false
-    if (CONFIG.PLATFORM === 'PC') {
+    if (CONFIG.IS_PC) {
       routerParams.value = route.query
     }
     if (routerParams.value.embyIncludeItemTypes == 'Series') {

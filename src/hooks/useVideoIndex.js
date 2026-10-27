@@ -1,7 +1,7 @@
 import { ref, onBeforeMount } from 'vue'
 import { setTmdbKey, getUntokenDicts, addOperLog } from '@/network/apis'
 import { loginUser, getFolder, getTvSeason, get189Folder, getQuarkFolder, getCutContent } from '@/utils/common'
-import { handleSeasonName, handleNameYear, generateChineseNumberMapping, recursionMovie, recursionTv } from '@/utils/scrape'
+import { handleSeasonName, handleNameYear, recursionMovie, recursionTv, extractSeasonNumber, generateChineseNumberMapping } from '@/utils/scrape'
 import { toStringfy } from '@/pages/mobile/mine/common'
 import { onShow, onUnload } from '@dcloudio/uni-app'
 import { chineseToPinYin } from '@/utils/pinyin.js'
@@ -13,10 +13,15 @@ import { searchMovieTvByType } from '@/utils/tmdb'
 import { useI18n } from 'vue-i18n'
 import dayjs from 'dayjs'
 import emptyBg from '@/static/poster-empty.png'
-import { PLATFORM } from '@/utils/config.js'
+import { IS_TV } from '@/utils/config.js'
+import { useSourceSelect } from '@/hooks/useSourceSelect'
+import { useHistoryStore } from '@/stores/historyPlay'
+import { VIDEO_FORMAT } from '@/utils/player-common'
 
 export function useVideoIndex({ wil_modal }) {
   const { t } = useI18n()
+  const historyStore = useHistoryStore()
+  let historySyncTimer = null //返回本页时同步历史记录的延迟任务，页面卸载时需清理
   const video_navbar = ref(null)
   const listData = ref([])
   const sourceList = ref([])
@@ -136,19 +141,18 @@ export function useVideoIndex({ wil_modal }) {
     return result
   }
 
-  const refreshWebDavVideo = async () => {
+  //三网盘刮削的公共流程：重置统计 -> 登录(可选) -> 扫描目录 -> 比对 -> 刮削图片 -> 回写storage与埋点
+  const refreshPosterWall = async ({ prepare, scan, logTitle }) => {
     refreshData.value = { found: 0, toupdate: 0, updated: 0, success: 0, fail: 0 }
     movieTvData.value = { movie: [], tv: [] }
-    if (selectMedia.value.name) {
-      let res1 = await loginUser(selectMedia.value)
-      selectMedia.value.token = res1.data.token
-      uni.setStorageSync('sourceList', sourceList.value)
+    if (prepare) {
+      await prepare()
     }
-    await getMovieTv()
+    await scan()
     if (!movieTvData.value.movie.length && !movieTvData.value.tv.length) {
       scrollTop.value = 0
       refreshLoading.value = false
-      if (PLATFORM !== 'TV') {
+      if (!IS_TV) {
         wil_modal.value.showModal({
           title: t('modal.warmTip'),
           content: t('video.noPosterWallGuide'),
@@ -190,8 +194,21 @@ export function useVideoIndex({ wil_modal }) {
     uni.setStorageSync('localMovieTvData', localMovieTvData.value)
     scrollTop.value = 0
     refreshLoading.value = false
-    addOperLog({ title: t('video.webdavPosterWallGenerated'), businessType: 11, operatorType: 2 })
+    addOperLog({ title: logTitle, businessType: 11, operatorType: 2 })
   }
+
+  const refreshWebDavVideo = () =>
+    refreshPosterWall({
+      prepare: async () => {
+        if (selectMedia.value.name) {
+          let res1 = await loginUser(selectMedia.value)
+          selectMedia.value.token = res1.data.token
+          uni.setStorageSync('sourceList', sourceList.value)
+        }
+      },
+      scan: getMovieTv,
+      logTitle: t('video.webdavPosterWallGenerated'),
+    })
 
   //比较新刮削出来的影片是否已经存在或者删除，不存在就是待更新
   const compareMovieTv = (arr, type) => {
@@ -218,13 +235,13 @@ export function useVideoIndex({ wil_modal }) {
     }
     scrollTop.value = 0
     refreshLoading.value = true
-    let videoFormat = ['mp4', 'mkv', 'm2ts', 'avi', 'mov', 'ts', 'm3u8', 'iso']
+
     let movieMulu = muluData.movie?.filter(v => v.name == selectMedia.value.name)
     if (movieMulu?.length) {
       await Promise.allSettled(
         movieMulu.map(async h => {
           let movieResult = await getFolder({ path: h.path }, selectMedia.value)
-          movieResult.data.content ? '' : (movieResult.data.content = [])
+          if (!movieResult.data.content) movieResult.data.content = []
           await Promise.allSettled(
             movieResult.data.content.map(async v => {
               v.path = h.path + '/' + v.name
@@ -232,7 +249,7 @@ export function useVideoIndex({ wil_modal }) {
               if (v.type == '1') {
                 await recursionMovie(v, movieTvData.value.movie, selectType.value, selectMedia.value, refreshData.value)
               } else {
-                if (videoFormat.some(i => v.name.includes(i))) {
+                if (VIDEO_FORMAT.some(i => v.name.includes(i))) {
                   movieTvData.value.movie.push(v)
                   refreshData.value.found++
                 }
@@ -252,7 +269,7 @@ export function useVideoIndex({ wil_modal }) {
       await Promise.allSettled(
         tvMulu.map(async h => {
           let tvResult = await getFolder({ path: h.path }, selectMedia.value)
-          tvResult.data.content ? '' : (tvResult.data.content = [])
+          if (!tvResult.data.content) tvResult.data.content = []
           await Promise.allSettled(
             tvResult.data.content.map(async v => {
               v.path = h.path + '/' + v.name
@@ -276,22 +293,7 @@ export function useVideoIndex({ wil_modal }) {
     const processedItems = await Promise.allSettled(
       arr.map(async item => {
         try {
-          const numberMapping = generateChineseNumberMapping(40, 'string')
-          const match = item.name.match(/第([一二三四五六七八九十\d]+)季/)
-          let season = ''
-          if (match) {
-            if (!isNaN(Number(match[1])) && match[1].trim() !== '') {
-              season = match[1]
-            } else {
-              season = numberMapping[match[1]]
-            }
-          } else {
-            if (item.name.indexOf('特别篇') > -1) {
-              season = '0'
-            } else {
-              season = '1'
-            }
-          }
+          const season = extractSeasonNumber(item.name)
           //刮削的时候查询这个影片名是不是在本地已经有了，本地有了的话，就不用去tmdb查了
           let exitMovieTv = null
           let localMovieTvData = uni.getStorageSync('localMovieTvData') || {}
@@ -345,8 +347,8 @@ export function useVideoIndex({ wil_modal }) {
             newItem.genre_ids = data.genre_ids
             newItem.overview = data.overview
             newItem.voteAverage = data.vote_average //评分
-            data.openingTime ? (newItem.openingTime = data.openingTime) : '' //本地刮削的重新设置片头时间
-            data.endTime ? (newItem.endTime = data.endTime) : '' //本地刮削的重新设置片头时间
+            if (data.openingTime) newItem.openingTime = data.openingTime //本地刮削的重新设置片头时间
+            if (data.endTime) newItem.endTime = data.endTime //本地刮削的重新设置片头时间
             return newItem
           } else {
             refreshData.value.fail++
@@ -382,57 +384,11 @@ export function useVideoIndex({ wil_modal }) {
   }
 
   //天翼云盘refresh
-  const refresh189Video = async () => {
-    refreshData.value = { found: 0, toupdate: 0, updated: 0, success: 0, fail: 0 }
-    movieTvData.value = { movie: [], tv: [] }
-    await get189MovieTv()
-    if (!movieTvData.value.movie.length && !movieTvData.value.tv.length) {
-      scrollTop.value = 0
-      refreshLoading.value = false
-      if (PLATFORM !== 'TV') {
-        wil_modal.value.showModal({
-          title: t('modal.warmTip'),
-          content: t('video.noPosterWallGuide'),
-          confirmColor: '#ff6701',
-          confirm: async () => {
-            let query = {
-              url: CONFIG.BASE_URL.split(':4040')[0] + ':8443/app-webview/#/question',
-              title: t('navbar.feedback'),
-            }
-            uni.navigateTo({
-              url: '/pages/mobile/backend/index' + '?' + toStringfy(query),
-            })
-          },
-        })
-      }
-      return
-    }
-    let movie = groupBySource(movieTvData.value.movie)
-    let tv = groupBySource(movieTvData.value.tv)
-    compareMovieTv(movie, 'movie')
-    compareMovieTv(tv, 'tv')
-    await setMovieTvImg(movie, 'movie')
-      .then(res => {
-        localMovieTvData.value.movie = res
-      })
-      .catch(() => {
-        scrollTop.value = 0
-        refreshLoading.value = false
-        uni.showToast({
-          title: t('video.invalidApiKey'),
-          icon: 'none',
-        })
-      })
-    localMovieTvData.value.tv = await setMovieTvImg(tv, 'tv')
-    refreshData.value.updated = refreshData.value.toupdate
-    refreshData.value.toupdate = 0
-    refreshData.value.success = localMovieTvData.value.movie.length + localMovieTvData.value.tv.length
-    setNavbarStyle(!localMovieTvData.value?.movie?.length && !localMovieTvData.value?.tv?.length)
-    uni.setStorageSync('localMovieTvData', localMovieTvData.value)
-    scrollTop.value = 0
-    refreshLoading.value = false
-    addOperLog({ title: t('video.tianyiPosterWallGenerated'), businessType: 11, operatorType: 2 })
-  }
+  const refresh189Video = () =>
+    refreshPosterWall({
+      scan: get189MovieTv,
+      logTitle: t('video.tianyiPosterWallGenerated'),
+    })
 
   //根据设定好的文件路径进行查找天翼云盘的文件
   const get189MovieTv = async () => {
@@ -448,7 +404,7 @@ export function useVideoIndex({ wil_modal }) {
     }
     scrollTop.value = 0
     refreshLoading.value = true
-    let videoFormat = ['mp4', 'mkv', 'm2ts', 'avi', 'mov', 'ts', 'm3u8', 'iso']
+
     if (movieMulu?.length) {
       await Promise.allSettled(
         movieMulu.map(async h => {
@@ -456,7 +412,7 @@ export function useVideoIndex({ wil_modal }) {
           let movieArr = movieResult.fileListAO.fileList.filter(v => {
             v.path = h.path + '/' + v.name
             v.provider = '189CloudPC'
-            return videoFormat.some(i => v.name.includes(i))
+            return VIDEO_FORMAT.some(i => v.name.includes(i))
           })
           refreshData.value.found += movieArr.length
           movieTvData.value.movie.push(...movieArr)
@@ -479,7 +435,7 @@ export function useVideoIndex({ wil_modal }) {
       await Promise.allSettled(
         tvMulu.map(async h => {
           let tvResult = await get189Folder({ folderId: h.folderFileId }, selectMedia.value)
-          tvResult.fileListAO.folderList ? '' : (tvResult.fileListAO.folderList = [])
+          if (!tvResult.fileListAO.folderList) tvResult.fileListAO.folderList = []
           await Promise.allSettled(
             tvResult.fileListAO.folderList.map(async v => {
               v.path = h.path + '/' + v.name
@@ -497,57 +453,11 @@ export function useVideoIndex({ wil_modal }) {
     }
   }
   //夸克网盘refresh
-  const refreshQuarkVideo = async () => {
-    refreshData.value = { found: 0, toupdate: 0, updated: 0, success: 0, fail: 0 }
-    movieTvData.value = { movie: [], tv: [] }
-    await getQuarkMovieTv(listData.value[0])
-    if (!movieTvData.value.movie.length && !movieTvData.value.tv.length) {
-      scrollTop.value = 0
-      refreshLoading.value = false
-      if (PLATFORM !== 'TV') {
-        wil_modal.value.showModal({
-          title: t('modal.warmTip'),
-          content: t('video.noPosterWallGuide'),
-          confirmColor: '#ff6701',
-          confirm: async () => {
-            let query = {
-              url: CONFIG.BASE_URL.split(':4040')[0] + ':8443/app-webview/#/question',
-              title: t('navbar.feedback'),
-            }
-            uni.navigateTo({
-              url: '/pages/mobile/backend/index' + '?' + toStringfy(query),
-            })
-          },
-        })
-      }
-      return
-    }
-    let movie = groupBySource(movieTvData.value.movie)
-    let tv = groupBySource(movieTvData.value.tv)
-    compareMovieTv(movie, 'movie')
-    compareMovieTv(tv, 'tv')
-    await setMovieTvImg(movie, 'movie')
-      .then(res => {
-        localMovieTvData.value.movie = res
-      })
-      .catch(() => {
-        scrollTop.value = 0
-        refreshLoading.value = false
-        uni.showToast({
-          title: t('video.invalidApiKey'),
-          icon: 'none',
-        })
-      })
-    localMovieTvData.value.tv = await setMovieTvImg(tv, 'tv')
-    refreshData.value.updated = refreshData.value.toupdate
-    refreshData.value.toupdate = 0
-    refreshData.value.success = localMovieTvData.value.movie.length + localMovieTvData.value.tv.length
-    setNavbarStyle(!localMovieTvData.value?.movie?.length && !localMovieTvData.value?.tv?.length)
-    uni.setStorageSync('localMovieTvData', localMovieTvData.value)
-    scrollTop.value = 0
-    refreshLoading.value = false
-    addOperLog({ title: t('video.quarkPosterWallGenerated'), businessType: 11, operatorType: 2 })
-  }
+  const refreshQuarkVideo = () =>
+    refreshPosterWall({
+      scan: () => getQuarkMovieTv(listData.value[0]),
+      logTitle: t('video.quarkPosterWallGenerated'),
+    })
 
   //查找天翼云盘中的名叫电影,电视剧的文件夹，按照此路径简单查询/我的视频/电影，/我的视频/电视剧，避免扫库有风险
   const getQuarkMovieTv = async () => {
@@ -563,7 +473,7 @@ export function useVideoIndex({ wil_modal }) {
     }
     scrollTop.value = 0
     refreshLoading.value = true
-    let videoFormat = ['mp4', 'mkv', 'm2ts', 'avi', 'mov', 'ts', 'm3u8', 'iso']
+
     if (movieMulu?.length) {
       await Promise.allSettled(
         movieMulu.map(async h => {
@@ -577,7 +487,7 @@ export function useVideoIndex({ wil_modal }) {
               if (v.file_type == '0') {
                 await recursionMovie(v, movieTvData.value.movie, selectType.value, selectMedia.value, refreshData.value)
               } else {
-                if (videoFormat.some(i => v.name.includes(i))) {
+                if (VIDEO_FORMAT.some(i => v.name.includes(i))) {
                   movieTvData.value.movie.push(v)
                   refreshData.value.found++
                 }
@@ -596,7 +506,7 @@ export function useVideoIndex({ wil_modal }) {
       await Promise.allSettled(
         tvMulu.map(async h => {
           let tvResult = await getQuarkFolder({ fid: h.folderFileId }, selectMedia.value)
-          tvResult.data.list ? '' : (tvResult.data.list = [])
+          if (!tvResult.data.list) tvResult.data.list = []
           tvResult.data.list = tvResult.data.list.map(v => {
             return { id: v.fid, name: v.file_name, path: h.path + '/' + v.file_name, provider: 'Quark', size: v.size, file_type: v.file_type }
           })
@@ -679,8 +589,12 @@ export function useVideoIndex({ wil_modal }) {
     } else if (selectType.value.type == 'Emby') {
       await refreshEmby()
     }
-    historyPlay.value = uni.getStorageSync('historyPlay') || []
-    historyPlay.value = historyPlay.value.filter(v => v.sourceType == selectType.value.type && v.sourceName == selectMedia.value.name)
+    syncHistoryPlay()
+  }
+
+  //同步当前源的历史记录：只保留本地影视库中仍存在的记录，并回写storage
+  const syncHistoryPlay = () => {
+    historyPlay.value = historyStore.readBySource(selectType.value.type, selectMedia.value.name)
     //从历史播放记录中筛选出当前影视中存在的
     historyPlay.value = historyPlay.value.filter(item => {
       return (
@@ -694,25 +608,11 @@ export function useVideoIndex({ wil_modal }) {
         })
       )
     })
-    let historyArr = uni.getStorageSync('historyPlay') || []
-    historyArr = historyArr.filter(v => v.sourceType != selectType.value.type || v.sourceName != selectMedia.value.name)
-    uni.setStorageSync('historyPlay', [...historyArr, ...historyPlay.value])
+    const others = historyStore.read().filter(v => v.sourceType != selectType.value.type || v.sourceName != selectMedia.value.name)
+    historyStore.write([...others, ...historyPlay.value])
   }
   //判断选择的是webdav还是天翼云盘还是夸克
-  const judgeSelect = () => {
-    sourceList.value = uni.getStorageSync('sourceList')
-    selectType.value =
-      sourceList.value.find(item => {
-        let select = item.list.find(i => i.active)
-        if (select) {
-          // selectMedia.value.name && selectMedia.value.name != select.name ? uni.setStorageSync("historyPlay", []) : "";
-          selectMedia.value = select
-          return true
-        } else {
-          return false
-        }
-      }) || {}
-  }
+  const { judgeSelect } = useSourceSelect({ selectType, selectMedia, sourceListRef: sourceList })
 
   const initSourceList = () => {
     sourceList.value = uni.getStorageSync('sourceList')
@@ -755,48 +655,20 @@ export function useVideoIndex({ wil_modal }) {
     initSourceList()
     judgeSelect()
     localMovieTvData.value = uni.getStorageSync('localMovieTvData') || {}
-    !localMovieTvData.value?.tv?.length && !localMovieTvData.value?.movie?.length ? (scrollTop.value = 0) : ''
+    if (!localMovieTvData.value?.tv?.length && !localMovieTvData.value?.movie?.length) scrollTop.value = 0
     tmdbKey.value = uni.getStorageSync('settingData').tmdbKey || ''
     if (uni.getStorageSync('secondPage') == 'videoPlayer') {
-      setTimeout(() => {
-        historyPlay.value = uni.getStorageSync('historyPlay') || []
-        historyPlay.value = historyPlay.value.filter(v => v.sourceType == selectType.value.type && v.sourceName == selectMedia.value.name)
-        historyPlay.value = historyPlay.value.filter(item => {
-          return (
-            localMovieTvData.value.movie?.some(v => handleSeasonName(v.name, true) == handleSeasonName(item.name, true) && v.movieTvId == item.movieTvId) ||
-            localMovieTvData.value.tv?.some(v => {
-              if (item.season != '1') {
-                return handleSeasonName(v.name, true) == handleSeasonName(item.titlePlay) && v.movieTvId == item.movieTvId
-              } else {
-                return handleSeasonName(v.name, true) == item.titlePlay && v.movieTvId == item.movieTvId
-              }
-            })
-          )
-        })
-        let historyArr = uni.getStorageSync('historyPlay') || []
-        historyArr = historyArr.filter(v => v.sourceType != selectType.value.type || v.sourceName != selectMedia.value.name)
-        uni.setStorageSync('historyPlay', [...historyArr, ...historyPlay.value])
+      if (historySyncTimer) {
+        clearTimeout(historySyncTimer)
+      }
+      historySyncTimer = setTimeout(() => {
+        syncHistoryPlay()
+        historySyncTimer = null
       }, 800) //为什么加延迟，因为上一个页面setStorageSync的时候，不加延迟返回这个页面获取不到最新的storage
     } else {
       historyPlay.value = []
       if (!uni.getStorageSync('isreload')) {
-        historyPlay.value = uni.getStorageSync('historyPlay') || []
-        historyPlay.value = historyPlay.value.filter(v => v.sourceType == selectType.value.type && v.sourceName == selectMedia.value.name)
-        historyPlay.value = historyPlay.value.filter(item => {
-          return (
-            localMovieTvData.value.movie?.some(v => handleSeasonName(v.name, true) == handleSeasonName(item.name) && v.movieTvId == item.movieTvId) ||
-            localMovieTvData.value.tv?.some(v => {
-              if (item.season != '1') {
-                return handleSeasonName(v.name, true) == handleSeasonName(item.titlePlay) && v.movieTvId == item.movieTvId
-              } else {
-                return handleSeasonName(v.name, true) == item.titlePlay && v.movieTvId == item.movieTvId
-              }
-            })
-          )
-        })
-        let historyArr = uni.getStorageSync('historyPlay') || []
-        historyArr = historyArr.filter(v => v.sourceType != selectType.value.type || v.sourceName != selectMedia.value.name)
-        uni.setStorageSync('historyPlay', [...historyArr, ...historyPlay.value])
+        syncHistoryPlay()
       }
     }
     uni.removeStorageSync('secondPage')
@@ -887,6 +759,12 @@ export function useVideoIndex({ wil_modal }) {
   })
   onShow(() => {
     showPage()
+  })
+  onUnload(() => {
+    if (historySyncTimer) {
+      clearTimeout(historySyncTimer)
+      historySyncTimer = null
+    }
   })
   return {
     video_navbar,

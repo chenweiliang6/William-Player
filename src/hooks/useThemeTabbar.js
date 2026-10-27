@@ -2,7 +2,7 @@ import { watch, ref } from 'vue';
 import { useThemeStore } from '@/stores/theme';
 import { useLocaleStore } from '@/stores/locale';
 import { onShow } from '@dcloudio/uni-app';
-import { PLATFORM } from '@/utils/config.js';
+import { PLATFORM, IS_MOBILE } from '@/utils/config.js';
 
 export function useThemeTabbar(options) {
   const themeStore = useThemeStore();
@@ -19,7 +19,7 @@ export function useThemeTabbar(options) {
         themeStore.applyNavigationBar('transparentDark');
       }
 
-      if (PLATFORM === 'MOBILE') {
+      if (IS_MOBILE) {
         try {
           Promise.resolve(
             uni.setTabBarStyle({
@@ -27,14 +27,16 @@ export function useThemeTabbar(options) {
               borderStyle: 'black',
             })
           ).catch(() => {})
-        } catch (error) {}
+        } catch (error) {
+          //低版本运行环境不支持该API，失败可忽略
+        }
       }
     } else {
       if (options1.customNav) {
         themeStore.applyNavigationBar('transparentLight');
       }
 
-      if (PLATFORM === 'MOBILE') {
+      if (IS_MOBILE) {
         try {
           Promise.resolve(
             uni.setTabBarStyle({
@@ -42,11 +44,13 @@ export function useThemeTabbar(options) {
               borderStyle: 'white',
             })
           ).catch(() => {})
-        } catch (error) {}
+        } catch (error) {
+          //低版本运行环境不支持该API，失败可忽略
+        }
       }
     }
 
-    if (PLATFORM === 'MOBILE' && localeStore.tabBarTextDirty) {
+    if (IS_MOBILE && localeStore.tabBarTextDirty) {
       localeStore.applyTabBarText();
     }
   };

@@ -29,6 +29,7 @@
 import i18n from "@/i18n";
 import { addOperLog } from "@/network/apis";
 import { getWebDAVUrl, get189VideoUrl, loginUser, getQuarkResolutionUrl, getQuarkVideoUrl, getFolder, getTvSeason, get189Folder, getQuarkFolder } from "@/utils/common";
+import { sortVideoList, filterVideoFormat } from "@/utils/player-common";
 import { calTime, handleSeasonName, generateChineseNumberMapping } from "@/utils/scrape";
 import { IMG_DOMAIN } from "@/utils/config";
 
@@ -397,7 +398,6 @@ export default {
         }
       }
       let result = {};
-      let videoFormat = ["mp4", "mkv", "m2ts", "avi", "mov", "ts", "m3u8", "iso"];
       if (this.selectType.type == "WebDAV") {
         try {
           result = await getFolder(
@@ -410,27 +410,9 @@ export default {
           this.showRehandleButton = true;
           return;
         }
-        result.data.content = result.data.content.filter((h) => {
-          return videoFormat.some((v) => h.name.includes(v));
-        });
+        result.data.content = filterVideoFormat(result.data.content, "name");
         //对电视进行排序
-        this.tvList = result.data.content.sort((a, b) => {
-          const regex = /S\d{2}E\d{2}/;
-          const regex1 = /\d+/;
-          if (a.name.match(regex)) {
-            let aName = a.name.match(regex)[0];
-            let bName = b.name.match(regex)[0];
-            const numA = parseInt(aName.slice(-2), 10);
-            const numB = parseInt(bName.slice(-2), 10);
-            return numA - numB;
-          } else if (a.name.match(regex1)) {
-            let aName = a.name.match(regex1)[0];
-            let bName = b.name.match(regex1)[0];
-            const numA = parseInt(aName.slice(-2), 10);
-            const numB = parseInt(bName.slice(-2), 10);
-            return numA - numB;
-          }
-        });
+        this.tvList = sortVideoList(result.data.content, "name");
       } else if (this.selectType.type == "天翼云盘") {
         try {
           result = await get189Folder(
@@ -443,27 +425,9 @@ export default {
           this.showRehandleButton = true;
           return;
         }
-        result.fileListAO.fileList = result.fileListAO.fileList.filter((h) => {
-          return videoFormat.some((v) => h.name.includes(v));
-        });
+        result.fileListAO.fileList = filterVideoFormat(result.fileListAO.fileList, "name");
         //对电视进行排序
-        this.tvList = result.fileListAO.fileList.sort((a, b) => {
-          const regex = /S\d{2}E\d{2}/;
-          const regex1 = /\d+/;
-          if (a.name.match(regex)) {
-            let aName = a.name.match(regex)[0];
-            let bName = b.name.match(regex)[0];
-            const numA = parseInt(aName.slice(-2), 10);
-            const numB = parseInt(bName.slice(-2), 10);
-            return numA - numB;
-          } else if (a.name.match(regex1)) {
-            let aName = a.name.match(regex1)[0];
-            let bName = b.name.match(regex1)[0];
-            const numA = parseInt(aName.slice(-2), 10);
-            const numB = parseInt(bName.slice(-2), 10);
-            return numA - numB;
-          }
-        });
+        this.tvList = sortVideoList(result.fileListAO.fileList, "name");
       } else if (this.selectType.type == "夸克网盘") {
         try {
           result = await getQuarkFolder(
@@ -476,28 +440,9 @@ export default {
           this.showRehandleButton = true;
           return;
         }
-        result.data.list = result.data.list.filter((h) => {
-          return videoFormat.some((v) => h.file_name.includes(v));
-        });
+        result.data.list = filterVideoFormat(result.data.list, "file_name");
         //对电视进行排序
-        this.tvList = result.data.list
-          .sort((a, b) => {
-            const regex = /S\d{2}E\d{2}/;
-            const regex1 = /\d+/;
-            if (a.file_name.match(regex)) {
-              let aName = a.file_name.match(regex)[0];
-              let bName = b.file_name.match(regex)[0];
-              const numA = parseInt(aName.slice(-2), 10);
-              const numB = parseInt(bName.slice(-2), 10);
-              return numA - numB;
-            } else if (a.file_name.match(regex1)) {
-              let aName = a.file_name.match(regex1)[0];
-              let bName = b.file_name.match(regex1)[0];
-              const numA = parseInt(aName.slice(-2), 10);
-              const numB = parseInt(bName.slice(-2), 10);
-              return numA - numB;
-            }
-          })
+        this.tvList = sortVideoList(result.data.list, "file_name")
           .map((i) => {
             return {
               id: i.fid,

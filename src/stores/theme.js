@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { PLATFORM } from '@/utils/config.js'
+import { IS_PC, IS_MOBILE } from '@/utils/config.js'
 
 const THEME_MODES = ['light', 'dark', 'auto']
 
@@ -103,7 +103,9 @@ export const useThemeStore = defineStore('theme', {
         if (typeof plus !== 'undefined' && plus.nativeUI) {
           this.mode === 'auto' ? plus.nativeUI.setUIStyle('auto') : plus.nativeUI.setUIStyle(this.resolvedTheme)
         }
-      } catch (e) {}
+      } catch (e) {
+          //低版本运行环境不支持该API，失败可忽略
+        }
       // #endif
     },
 
@@ -114,14 +116,16 @@ export const useThemeStore = defineStore('theme', {
     },
 
     applyNavigationBar(variant = 'default') {
-      if (PLATFORM === 'PC' || typeof uni.setNavigationBarColor !== 'function') return
+      if (IS_PC || typeof uni.setNavigationBarColor !== 'function') return
       try {
         Promise.resolve(uni.setNavigationBarColor(this.getNavigationBarStyle(variant))).catch(() => {})
-      } catch (e) {}
+      } catch (e) {
+          //低版本运行环境不支持该API，失败可忽略
+        }
     },
 
     _applyTabBar() {
-      if (PLATFORM !== 'MOBILE' || typeof uni.setTabBarStyle !== 'function') return
+      if (!IS_MOBILE || typeof uni.setTabBarStyle !== 'function') return
       const isDark = this.resolvedTheme === 'dark'
       try {
         Promise.resolve(
@@ -132,7 +136,9 @@ export const useThemeStore = defineStore('theme', {
             borderStyle: isDark ? 'black' : 'white',
           })
         ).catch(() => {})
-      } catch (e) {}
+      } catch (e) {
+          //低版本运行环境不支持该API，失败可忽略
+        }
     },
 
     init() {

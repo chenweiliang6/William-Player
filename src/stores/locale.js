@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { Locale as NutUILocale } from 'nutui-uniapp/locale'
-import { PLATFORM } from '@/utils/config.js'
+import { IS_MOBILE } from '@/utils/config.js'
 
 export const LOCALE_STORAGE_KEY = 'app_locale'
 
@@ -20,7 +20,7 @@ const LEGACY_LOCALE_MAP = {
 
 const DEFAULT_LOCALE = 'zh-Hans'
 
-const hasNativeTabBar = () => PLATFORM === 'MOBILE' && typeof uni.setTabBarItem === 'function'
+const hasNativeTabBar = () => IS_MOBILE && typeof uni.setTabBarItem === 'function'
 
 export const getLocaleConfig = locale => {
   return SUPPORTED_LOCALES.find(item => item.value === locale) || SUPPORTED_LOCALES[0]

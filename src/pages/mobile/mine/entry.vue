@@ -13,7 +13,7 @@ onBeforeMount(async () => {
   if (!uni.getStorageSync('historyPlay')) {
     uni.setStorageSync('historyPlay', [])
   }
-  if (CONFIG.PLATFORM === 'TV') {
+  if (CONFIG.IS_TV) {
     //tv端跳转到tv的首页
     let localMovieTvData = uni.getStorageSync('localMovieTvData')
     let settingData = uni.getStorageSync('settingData')

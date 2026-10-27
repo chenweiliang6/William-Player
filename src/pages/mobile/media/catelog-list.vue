@@ -113,7 +113,7 @@ const getFileList = async data => {
   } else if (selectType.value.type == '天翼云盘') {
     let res = await get189Folder({ ...data, folderId: routerParams.value.folderFileId }, selectMedia.value)
     res.fileListAO.fileList.forEach(v => {
-      v?.icon?.largeUrl ? (v.thumb = v.icon.largeUrl) : ''
+      if (v?.icon?.largeUrl) v.thumb = v.icon.largeUrl
       v.type = 0
       v.folderFileId = v.id
     })
@@ -127,7 +127,7 @@ const getFileList = async data => {
     res.data.list.forEach(v => {
       v.file_type == 0 ? (v.type = 1) : (v.type = 0)
       v.name = v.file_name
-      v.big_thumbnail ? (v.thumb = v.big_thumbnail) : ''
+      if (v.big_thumbnail) v.thumb = v.big_thumbnail
       v.folderFileId = v.fid
     })
     return { data: { content: res.data.list, total: res.metadata._total } }

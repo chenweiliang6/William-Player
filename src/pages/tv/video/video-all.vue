@@ -9,10 +9,10 @@
           :scrollIntoView="scrollIntoView" :scroll-with-animation="true" @currentData="currentData">
           <template #default="item">
             <div :class="['video-all-list__item', tabIndex === item.$index ? 'video-all-list__active' : '']"
-              @click="toVideoDetail(item)" @longpress="longPress(item)">
+              @click="toVideoDetail(item)">
               <div class="item-poster">
                 <image
-                  :src="(!routerParams.isConnected && !item.loadImg) ? emptyBg : (isRecent ? setRecentImg(item.poster) : setEmptyImg(item.poster))"
+                  :src="(!routerParams.isConnected && !item.loadImg) ? emptyBg : setEmptyImg(item.poster)"
                   class="item-poster-image" mode="aspectFill" @error="imgError(item)" @load="imgLoad(item)">
                 </image>
               </div>
@@ -30,21 +30,23 @@
 import wilList from "@/components/mobile/wil-list/index.vue";
 import emptyBg from "@/static/empty_bg.png";
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useVideoAll } from "@/hooks/useVideoAll";
 import tvPage from "@/components/tv/tv-page/index.vue";
 import { debounce } from "@/utils/scrape";
 
 const wil_list = ref(null);
 const wil_modal = ref(null);
+const { t } = useI18n()
 const lineHeight = ref('')
 const tabIndex = ref(0)
 const scrollIntoView = ref('')
 
 const listData = ref([])
 
-const { routerParams, showPopover, editHistory, mapping, changeSort, clearPart,
-  getMovieTvList, requestParams, windowWidth, changeItemFn, recentSelect,
-  toVideoDetail, longPress, setRecentImg, setEmptyImg, imgError, imgLoad, removeExtension, clearAll, } = useVideoAll({ wil_list, wil_modal })
+const { routerParams, isRecent, displayTitle, changeTab, tabList,
+  getMovieTvList, requestParams, windowWidth, changeItemFn,
+  toVideoDetail, setEmptyImg, imgError, imgLoad, removeExtension, } = useVideoAll({ wil_list, wil_modal })
 
 
 const setItemWidth = () => {
@@ -86,7 +88,6 @@ const evtMove = (keyCode) => {
   } else {
     setScrollIntoView();
   }
-  console.log(scrollIntoView.value, 'asd');
 
   nowTime = time;
 };

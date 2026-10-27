@@ -192,18 +192,18 @@ const getMovieTvDetail = async (type = 'all') => {
   } else if (routerParams.value.type == 'tv') {
     seasonFirst.value.img = res.backdrop_path
     if ((type == 'all' && seasonArr.value.length == 1) || (type == 'season' && seasonArr.value.length > 1)) {
-      res.backdrop_path ? (imgData.value.img = res.backdrop_path) : ''
+      if (res.backdrop_path) imgData.value.img = res.backdrop_path
     }
     seasonFirst.value.overview = res.overview
-    res.vote_average ? (imgData.value.score = res.vote_average.toFixed(1)) : ''
-    res.genres?.length ? (imgData.value.genres = res.genres.map(i => i.name).join(' ')) : ''
-    res.release_date ? (imgData.value.releaseTime = res.release_date) : ''
-    res.poster_path ? (imgData.value.poster = res.poster_path) : ''
-    res.tmdbId ? (imgData.value.tmdbId = res.tmdbId) : ''
-    res.production_companies ? (imgData.value.production_companies = res.production_companies) : ''
-    res.overview ? (imgData.value.overview = res.overview) : ''
-    res.path ? (imgData.value.path = res.path) : ''
-    res.number_of_episodes ? (imgData.value.runtime = t('video.totalEpisodesInLibrary', { total: res.number_of_episodes || 0, count: res.number_of_episodes || 0 })) : ''
+    if (res.vote_average) imgData.value.score = res.vote_average.toFixed(1)
+    if (res.genres?.length) imgData.value.genres = res.genres.map(i => i.name).join(' ')
+    if (res.release_date) imgData.value.releaseTime = res.release_date
+    if (res.poster_path) imgData.value.poster = res.poster_path
+    if (res.tmdbId) imgData.value.tmdbId = res.tmdbId
+    if (res.production_companies) imgData.value.production_companies = res.production_companies
+    if (res.overview) imgData.value.overview = res.overview
+    if (res.path) imgData.value.path = res.path
+    if (res.number_of_episodes) imgData.value.runtime = t('video.totalEpisodesInLibrary', { total: res.number_of_episodes || 0, count: res.number_of_episodes || 0 })
   }
   return res
 }
@@ -299,7 +299,7 @@ const clickPlayButton = () => {
   } else if (routerParams.value.type == 'tv') {
     uni.setStorageSync('tvList', tvList.value)
     let openEndTime = {}
-    routerParams.value.movieTvId ? '' : (openEndTime.noSetHistory = 0)
+    if (!routerParams.value.movieTvId) openEndTime.noSetHistory = 0
     uni.navigateTo({
       url: `/pages/mobile/video/emby/emby-player?folderFileId=${tvList.value[0].id}&type=tv`,
     })
@@ -374,7 +374,7 @@ onShow(() => {
     setButtonText()
     if (!firstEnter.value) {
       nextTick(() => {
-        historyTv.value.name ? (scrollIntoView.value = 'name' + historyTv.value.ji) : ''
+        if (historyTv.value?.name) scrollIntoView.value = 'name' + historyTv.value.ji
       })
     }
     firstEnter.value = false

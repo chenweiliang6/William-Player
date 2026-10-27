@@ -45,7 +45,7 @@ import { onBeforeMount, ref, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDict } from '@/utils/useDict'
 import { loginUser, getFolder, get189Folder, getQuarkFolder, getTvSeason, getMovieTvById } from '@/utils/common'
-import { parseTime, calTime, handleSecond, handleSeasonName, generateChineseNumberMapping } from '@/utils/scrape'
+import { parseTime, calTime, handleSecond, handleSeasonName, extractSeasonNumber, generateChineseNumberMapping } from '@/utils/scrape'
 import { onShow, onLoad } from '@dcloudio/uni-app'
 import editIcon from '@/static/edit_icon.png'
 import timeIcon from '@/static/time_icon.png'
@@ -218,21 +218,7 @@ const handleTv = async (seasonData1 = null) => {
     season = localMovieTvData.value.tv.find(i => i.movieTvId == routerParams.value.movieTvId).season
     season = season != '1' ? season : activeSeason.value.season
   } else {
-    const numberMapping = generateChineseNumberMapping(40, 'string')
-    const match = imgData.value.title.match(/第([一二三四五六七八九十\d]+)季/)
-    if (match) {
-      if (!isNaN(Number(match[1])) && match[1].trim() !== '') {
-        season = match[1]
-      } else {
-        season = numberMapping[match[1]]
-      }
-    } else {
-      if (imgData.value.title.indexOf('特别篇') > -1) {
-        season = '0'
-      } else {
-        season = '1'
-      }
-    }
+    season = extractSeasonNumber(imgData.value.title)
     season = season != '1' ? season : activeSeason.value.season
   }
   let result = {}
@@ -399,7 +385,7 @@ const handleTv = async (seasonData1 = null) => {
     vote_average: res1.vote_average,
   }
   uni.setStorageSync('seasonData', seasonData)
-  season != '1' && res1.overview ? (overview.value = res1.overview) : ''
+  if (season != '1' && res1.overview) overview.value = res1.overview
   //处理现有的集数，将tmdb的封面，时长都设置进去，还有每一集的标题
   tvList.value.forEach((v, vindex) => {
     if (res1.episodes) {
@@ -412,7 +398,7 @@ const handleTv = async (seasonData1 = null) => {
     }
   })
   nextTick(() => {
-    historyTv.value.name ? (scrollIntoView.value = 'name' + historyTv.value.ji) : ''
+    if (historyTv.value.name) scrollIntoView.value = 'name' + historyTv.value.ji
   })
 }
 
@@ -474,7 +460,7 @@ const changeTvSource = async obj => {
   setButtonText()
   await handleTv()
   nextTick(() => {
-    historyTv.value.name ? (scrollIntoView.value = 'name' + historyTv.value.ji) : (scrollIntoView.value = 'name1')
+    scrollIntoView.value = historyTv.value.name ? 'name' + historyTv.value.ji : 'name1'
   })
 }
 
@@ -489,7 +475,7 @@ const changeTvSeason = async obj => {
   setButtonText()
   await handleTv()
   nextTick(() => {
-    historyTv.value.name ? (scrollIntoView.value = 'name' + historyTv.value.ji) : (scrollIntoView.value = 'name1')
+    scrollIntoView.value = historyTv.value.name ? 'name' + historyTv.value.ji : 'name1'
   })
 }
 
@@ -564,20 +550,19 @@ const clickPlayButton = () => {
     let history = historyPlay.value?.find(i => i.titlePlay == imgData.value.title)
     if (history && activeSeason.value.path + '/' + history.name == '/' + history.path) {
       let openEndTime = {}
-      routerParams.value.movieTvId ? '' : (openEndTime.noSetHistory = 0)
-      nowTv.openingTime >= 0 ? (openEndTime.openingTime = nowTv.openingTime) : ''
-      nowTv.endTime >= 0 ? (openEndTime.endTime = nowTv.endTime) : ''
+      if (!routerParams.value.movieTvId) openEndTime.noSetHistory = 0
+      if (nowTv.openingTime >= 0) openEndTime.openingTime = nowTv.openingTime
+      if (nowTv.endTime >= 0) openEndTime.endTime = nowTv.endTime
+      const queryStr = toStringfy(openEndTime) ? '&' + toStringfy(openEndTime) : ''
       if (selectType.value.type == 'WebDAV') {
         uni.navigateTo({
-          url: `/pages/tv/video/video-player?path=${activeSeason.value.path.slice(1)}/${history.name}&type=tv${
-            toStringfy(openEndTime) ? '&' + toStringfy(openEndTime) : ''
-          }`,
+          url: `/pages/tv/video/video-player?path=${activeSeason.value.path.slice(1)}/${history.name}&type=tv`,
         })
       } else {
         uni.navigateTo({
           url: `/pages/tv/video/video-player?path=${activeSeason.value.path.slice(1)}/${history.name}&wjjId=${activeSeason.value.folderFileId}&folderFileId=${
             history.folderFileId
-          }&type=tv${toStringfy(openEndTime) ? '&' + toStringfy(openEndTime) : ''}`,
+          }&type=tv${queryStr}`,
         })
       }
     } else {
@@ -602,18 +587,19 @@ const clickPlayButton = () => {
       }
       uni.setStorageSync('historyPlay', [historyItem, ...historyArr])
       let openEndTime = {}
-      routerParams.value.movieTvId ? '' : (openEndTime.noSetHistory = 0)
-      nowTv.openingTime >= 0 ? (openEndTime.openingTime = nowTv.openingTime) : ''
-      nowTv.endTime >= 0 ? (openEndTime.endTime = nowTv.endTime) : ''
+      if (!routerParams.value.movieTvId) openEndTime.noSetHistory = 0
+      if (nowTv.openingTime >= 0) openEndTime.openingTime = nowTv.openingTime
+      if (nowTv.endTime >= 0) openEndTime.endTime = nowTv.endTime
+      const queryStr = toStringfy(openEndTime) ? '&' + toStringfy(openEndTime) : ''
       if (selectType.value.type == 'WebDAV') {
         uni.navigateTo({
-          url: `/pages/tv/video/video-player?path=${activeSeason.value.path.slice(1)}/${tvList.value[0].name}&type=tv${toStringfy(openEndTime) ? '&' + toStringfy(openEndTime) : ''}`,
+          url: `/pages/tv/video/video-player?path=${activeSeason.value.path.slice(1)}/${tvList.value[0].name}&type=tv${queryStr}`,
         })
       } else {
         uni.navigateTo({
           url: `/pages/tv/video/video-player?path=${activeSeason.value.path.slice(1)}/${tvList.value[0].name}&wjjId=${activeSeason.value.folderFileId}&folderFileId=${
             tvList.value[0].id
-          }&type=tv${toStringfy(openEndTime) ? '&' + toStringfy(openEndTime) : ''}`,
+          }&type=tv${queryStr}`,
         })
       }
     }
@@ -637,18 +623,19 @@ const toPlayVideo = (item, index) => {
   if (history && activeSeason.value.path + '/' + history.name == '/' + history.path && activeSeason.value.season == history.season) {
     //存在历史记录，同一路径的片源，同一季
     let openEndTime = {}
-    routerParams.value.movieTvId ? '' : (openEndTime.noSetHistory = 0)
-    nowTv.openingTime >= 0 ? (openEndTime.openingTime = nowTv.openingTime) : ''
-    nowTv.endTime >= 0 ? (openEndTime.endTime = nowTv.endTime) : ''
+    if (!routerParams.value.movieTvId) openEndTime.noSetHistory = 0
+    if (nowTv.openingTime >= 0) openEndTime.openingTime = nowTv.openingTime
+    if (nowTv.endTime >= 0) openEndTime.endTime = nowTv.endTime
+    const queryStr = toStringfy(openEndTime) ? '&' + toStringfy(openEndTime) : ''
     if (selectType.value.type == 'WebDAV') {
       uni.navigateTo({
-        url: `/pages/tv/video/video-player?path=${activeSeason.value.path.slice(1)}/${item.name}&type=tv${toStringfy(openEndTime) ? '&' + toStringfy(openEndTime) : ''}`,
+        url: `/pages/tv/video/video-player?path=${activeSeason.value.path.slice(1)}/${item.name}&type=tv${queryStr}`,
       })
     } else {
       uni.navigateTo({
         url: `/pages/tv/video/video-player?path=${activeSeason.value.path.slice(1)}/${item.name}&wjjId=${activeSeason.value.folderFileId}&folderFileId=${
           item.id
-        }&type=tv${toStringfy(openEndTime) ? '&' + toStringfy(openEndTime) : ''}`,
+        }&type=tv${queryStr}`,
       })
     }
   } else {
@@ -674,20 +661,19 @@ const toPlayVideo = (item, index) => {
     uni.setStorageSync('historyPlay', [historyItem, ...historyArr])
 
     let openEndTime = {}
-    routerParams.value.movieTvId ? '' : (openEndTime.noSetHistory = 0)
-    nowTv.openingTime >= 0 ? (openEndTime.openingTime = nowTv.openingTime) : ''
-    nowTv.endTime >= 0 ? (openEndTime.endTime = nowTv.endTime) : ''
+    if (!routerParams.value.movieTvId) openEndTime.noSetHistory = 0
+    if (nowTv.openingTime >= 0) openEndTime.openingTime = nowTv.openingTime
+    if (nowTv.endTime >= 0) openEndTime.endTime = nowTv.endTime
+    const queryStr = toStringfy(openEndTime) ? '&' + toStringfy(openEndTime) : ''
     if (selectType.value.type == 'WebDAV') {
       uni.navigateTo({
-        url: `/pages/tv/video/video-player?path=${activeSeason.value.path.slice(1)}/${item.name}&type=tv${
-          toStringfy(openEndTime) ? '&' + toStringfy(openEndTime) : ''
-        }`,
+        url: `/pages/tv/video/video-player?path=${activeSeason.value.path.slice(1)}/${item.name}&type=tv`,
       })
     } else {
       uni.navigateTo({
         url: `/pages/tv/video/video-player?path=${activeSeason.value.path.slice(1)}/${item.name}&wjjId=${activeSeason.value.folderFileId}&folderFileId=${
           item.id
-        }&type=tv${toStringfy(openEndTime) ? '&' + toStringfy(openEndTime) : ''}`,
+        }&type=tv${queryStr}`,
       })
     }
   }
@@ -767,7 +753,7 @@ const resetMovieTvData = async () => {
     activeSeason.value = { ...selectSource.value.seasonArr[0] }
     setButtonText()
     nextTick(() => {
-      historyTv.value.name ? (scrollIntoView.value = 'name' + historyTv.value.ji) : ''
+      if (historyTv.value.name) scrollIntoView.value = 'name' + historyTv.value.ji
     })
     historyPlay.value = historyPlay.value.filter(i => i.titlePlay != imgData.value.title)
     let historyArr = uni.getStorageSync('historyPlay') || []
@@ -780,21 +766,7 @@ const resetMovieTvData = async () => {
       let nowTv = localMovieTvData.value.tv.find(i => i.movieTvId == oldMovieTvId && i.path == oldPath)
       let selectSource1 = nowTv.source.find(i => i.path == selectSource.value.path)
       selectSource1.name = resetMovieTv.name
-      const numberMapping = generateChineseNumberMapping(40, 'string')
-      const match = selectSource.value.name.match(/第([一二三四五六七八九十\d]+)季/)
-      if (match) {
-        if (!isNaN(Number(match[1])) && match[1].trim() !== '') {
-          nowTv.season = match[1]
-        } else {
-          nowTv.season = numberMapping[match[1]]
-        }
-      } else {
-        if (selectSource.value.name.indexOf('特别篇') > -1) {
-          nowTv.season = '0'
-        } else {
-          nowTv.season = '1'
-        }
-      }
+      nowTv.season = extractSeasonNumber(selectSource.value.name)
       nowTv.movieTvId = routerParams.value.movieTvId
       let res = await getMovieTvDetail()
       nowTv.type = '1'
@@ -897,7 +869,7 @@ onBeforeMount(async () => {
     await handleTv()
   }
   nextTick(() => {
-    historyTv.value.name ? (scrollIntoView.value = 'name' + historyTv.value.ji) : ''
+    if (historyTv.value.name) scrollIntoView.value = 'name' + historyTv.value.ji
   })
 })
 
@@ -906,7 +878,7 @@ onShow(() => {
     setButtonText()
     if (!firstEnter.value) {
       nextTick(() => {
-        historyTv.value.name ? (scrollIntoView.value = 'name' + historyTv.value.ji) : ''
+        if (historyTv.value.name) scrollIntoView.value = 'name' + historyTv.value.ji
       })
     }
     firstEnter.value = false

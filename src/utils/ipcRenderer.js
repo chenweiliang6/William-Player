@@ -1,6 +1,6 @@
 import * as CONFIG from './config.js'
 let Renderer = {}
-if (CONFIG.PLATFORM === 'PC') {
+if (CONFIG.IS_PC) {
   Renderer = (window.require && window.require('electron')) || window.electron || {};
 }
 /**
@@ -24,7 +24,7 @@ if (CONFIG.PLATFORM === 'PC') {
  * ipc
  */
 let ipc = undefined
-if (CONFIG.PLATFORM === 'PC') {
+if (CONFIG.IS_PC) {
   ipc = Renderer.ipcRenderer || undefined;
 }
 
@@ -32,7 +32,7 @@ if (CONFIG.PLATFORM === 'PC') {
  * 是否为EE环境
  */
 let isEE = false
-if (CONFIG.PLATFORM === 'PC') {
+if (CONFIG.IS_PC) {
   isEE = ipc ? true : false;
 }
 

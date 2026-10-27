@@ -8,6 +8,7 @@ import * as CONFIG from "@/utils/config";
 import { getEmbyList, getGenresList } from "../utils/emby";
 import dayjs from 'dayjs'
 import { useI18n } from 'vue-i18n'
+import { useSourceSelect } from '@/hooks/useSourceSelect'
 
 export function useHistoryPlayed({ wil_list, wil_modal }) {
     const { t } = useI18n()
@@ -25,23 +26,12 @@ export function useHistoryPlayed({ wil_list, wil_modal }) {
 
     const lineNumber = ref(3);
     const lineHeight = ref("");
-    const changeItemFn = ref(() => { });
+    let changeItemFn = () => {};
 
     const windowWidth = ref(375);
 
     //判断选择的是webdav还是天翼云盘还是夸克
-    const judgeSelect = () => {
-        let sourceList = uni.getStorageSync("sourceList");
-        selectType.value = sourceList.find((item) => {
-            let select = item.list.find((i) => i.active);
-            if (select) {
-                selectMedia.value = select;
-                return true;
-            } else {
-                return false;
-            }
-        });
-    };
+    const { judgeSelect } = useSourceSelect({ selectType, selectMedia });
 
     const editHistory = () => {
         let historyPlay = uni.getStorageSync("historyPlay");
@@ -53,7 +43,7 @@ export function useHistoryPlayed({ wil_list, wil_modal }) {
             return
         }
         isSelect.value = !isSelect.value;
-        changeItemFn.value = (item) => {
+        changeItemFn = (item) => {
             item.select = false;
         };
         recentSelect.value = [];
@@ -92,7 +82,7 @@ export function useHistoryPlayed({ wil_list, wil_modal }) {
     const toPlayHistory = async (item) => {
         //最近观看在选择状态下
         if (isSelect.value) {
-            changeItemFn.value = (vitem) => {
+            changeItemFn = (vitem) => {
                 vitem.select ? (vitem.select = false) : (vitem.select = true);
             };
             if (item.select) {
@@ -107,14 +97,14 @@ export function useHistoryPlayed({ wil_list, wil_modal }) {
             if (item.type == "movie") {
                 if (selectType.value.type == "WebDAV") {
                     uni.navigateTo({
-                        url: `/pages/${CONFIG.PLATFORM === 'TV' ? 'tv' : 'mobile'}/video/video-player?path=${item.path}&type=movie`,
+                        url: `/pages/${CONFIG.PLATFORM_DIR}/video/video-player?path=${item.path}&type=movie`,
                         success: () => {
                             setItemFirst(item);
                         },
                     });
                 } else {
                     uni.navigateTo({
-                        url: `/pages/${CONFIG.PLATFORM === 'TV' ? 'tv' : 'mobile'}/video/video-player?path=${item.path}&folderFileId=${item.folderFileId}&type=movie`,
+                        url: `/pages/${CONFIG.PLATFORM_DIR}/video/video-player?path=${item.path}&folderFileId=${item.folderFileId}&type=movie`,
                         success: () => {
                             setItemFirst(item);
                         },
@@ -129,14 +119,14 @@ export function useHistoryPlayed({ wil_list, wil_modal }) {
                 nowTv.endTime >= 0 ? (openEndTime.endTime = nowTv.endTime) : "";
                 if (selectType.value.type == "WebDAV") {
                     uni.navigateTo({
-                        url: `/pages/${CONFIG.PLATFORM === 'TV' ? 'tv' : 'mobile'}/video/video-player?path=${item.path}&titlePlay=${item.titlePlay}&type=tv&${toStringfy(openEndTime)}`,
+                        url: `/pages/${CONFIG.PLATFORM_DIR}/video/video-player?path=${item.path}&titlePlay=${item.titlePlay}&type=tv&${toStringfy(openEndTime)}`,
                         success: () => {
                             setItemFirst(item);
                         },
                     });
                 } else {
                     uni.navigateTo({
-                        url: `/pages/${CONFIG.PLATFORM === 'TV' ? 'tv' : 'mobile'}/video/video-player?path=${item.path}&folderFileId=${item.folderFileId}&titlePlay=${item.titlePlay}&type=tv&${toStringfy(openEndTime)}`,
+                        url: `/pages/${CONFIG.PLATFORM_DIR}/video/video-player?path=${item.path}&folderFileId=${item.folderFileId}&titlePlay=${item.titlePlay}&type=tv&${toStringfy(openEndTime)}`,
                     });
                 }
             }
@@ -147,7 +137,7 @@ export function useHistoryPlayed({ wil_list, wil_modal }) {
     const longPress = (item) => {
         if (isSelect.value) return;
         isSelect.value = true;
-        changeItemFn.value = (vitem) => {
+        changeItemFn = (vitem) => {
             vitem.select ? (vitem.select = false) : (vitem.select = true);
         };
         if (item.select) {
@@ -168,7 +158,7 @@ export function useHistoryPlayed({ wil_list, wil_modal }) {
         }
     }
     const imgError = (item) => {
-        changeItemFn.value = (item) => {
+        changeItemFn = (item) => {
             item.loadImg = false;
         };
         nextTick(() => {
@@ -213,7 +203,7 @@ export function useHistoryPlayed({ wil_list, wil_modal }) {
     };
     const imgLoad = (item) => {
         if (!routerParams.value.isConnected && !item.loadImg) return;
-        changeItemFn.value = (item) => {
+        changeItemFn = (item) => {
             item.loadImg = true;
         };
         nextTick(() => {

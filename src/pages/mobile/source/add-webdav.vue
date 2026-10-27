@@ -107,7 +107,7 @@ onLoad(options => {
   if (title.value == '修改Openlist/Alist') {
     let sourceList = uni.getStorageSync('sourceList')
     state.formData = sourceList.find(i => i.type == 'WebDAV').list.find(i => i.address == routerParams.value.address)
-    state.formData.protocol ? '' : (state.formData.protocol = 'http')
+    if (!state.formData.protocol) state.formData.protocol = 'http'
     state.oldData = JSON.parse(JSON.stringify(state.formData))
   }
 })

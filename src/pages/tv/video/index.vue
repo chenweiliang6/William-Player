@@ -157,7 +157,7 @@ const getStarList = arr => {
     return CONFIG.IMG_DOMAIN + '/t/p/w1920_and_h1080_bestv2' + item.backdrop
   })
   nextTick(() => {
-    scrollTop.value === 1 ? (scrollTop.value = 0) : ''
+    if (scrollTop.value === 1) scrollTop.value = 0
   })
 }
 const changeSwiper = index => {
@@ -239,9 +239,9 @@ const initFocusModel = () => {
   let isTrue = selectType.type == 'Emby' ? !embyMovieTvList.value?.length : !localMovieTvData.value?.movie?.length && !localMovieTvData.value?.tv?.length
   if (isTrue) {
     //此时不存在任何数据，焦点在添加新资源按钮上
-    !focusModel.value ? (focusModel.value = 'videoEmpty') : ''
+    if (!focusModel.value) focusModel.value = 'videoEmpty'
   } else {
-    focusModel.value === 'videoEmpty' ? (focusModel.value = 'starRecommend') : ''
+    if (focusModel.value === 'videoEmpty') focusModel.value = 'starRecommend'
   }
   console.log("刮削玩了",focusModel.value);
   

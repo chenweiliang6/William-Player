@@ -457,11 +457,11 @@ const editSource = (item, vitem) => {
   state.formData = vitem
   if (item.type === 'WebDAV') {
     state.options = createWebdavOptions()
-    state.formData.protocol ? '' : (state.formData.protocol = 'http')
+    if (!state.formData.protocol) state.formData.protocol = 'http'
     state.oldData = JSON.parse(JSON.stringify(state.formData))
   } else if (item.type === 'Emby') {
     state.options = createEmbyOptions()
-    state.formData.protocol ? '' : (state.formData.protocol = 'http')
+    if (!state.formData.protocol) state.formData.protocol = 'http'
     state.oldData = JSON.parse(JSON.stringify(state.formData))
   } else if (item.type === '天翼云盘') {
     state.options = createTianyiOptions()

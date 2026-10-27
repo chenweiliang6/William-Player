@@ -76,10 +76,10 @@
 <script setup>
 import wilNavbar from '@/components/mobile/wil-navbar/index.vue'
 import wilForm from '@/components/mobile/wil-form/index.vue'
-import { onLoad } from '@dcloudio/uni-app';
+import { onLoad, onUnload } from '@dcloudio/uni-app';
 import * as CONFIG from '@/utils/config.js'
 import { editUserInfo, editUserPhone, editUserEmail } from '@/network/apis.js'
-import { toSendEmail } from '@/utils/common.js'
+import { toSendEmail, clearEmailTimer } from '@/utils/common.js'
 import { computed, ref } from 'vue';
 import { useThemeClass } from '@/hooks/useThemeClass'
 import { useI18n } from 'vue-i18n'
@@ -282,6 +282,9 @@ const handleSendEmail = () => {
 }
 onLoad((options) => {
     routerParams.value = options
+})
+onUnload(() => {
+    clearEmailTimer()
 })
 </script>
 

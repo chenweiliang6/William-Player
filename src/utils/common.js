@@ -14,6 +14,99 @@ const buildCookie = cookieObj => {
     .join(';')
 }
 
+// 统一请求封装：PC 端走 Electron IPC，其余平台走 uni.request
+// 注意：ipc / ipcApiRoute 的 import 由 build/build.js 按平台自动注释/取消注释
+const httpRequest = (url, { method = 'GET', data, header, timeout = 5000 } = {}) => {
+  return new Promise((resolve, reject) => {
+    if (CONFIG.IS_PC) {
+      ipc
+        .invoke(ipcApiRoute.httpRequest, {
+          url,
+          method,
+          data,
+          header,
+          options: {
+            timeout,
+          },
+        })
+        .then(res => {
+          if (res.code === 200) {
+            resolve(res.data)
+          } else {
+            reject(res)
+          }
+        })
+        .catch(error => {
+          reject(error)
+        })
+    } else {
+      uni.request({
+        url,
+        method,
+        data,
+        header,
+        timeout,
+        success: res => {
+          resolve(res.data)
+        },
+        fail: error => {
+          reject(error)
+        },
+      })
+    }
+  })
+}
+
+const UA_189 = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0'
+const UA_QUARK =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) quark-cloud-drive/3.2.7 Chrome/100.0.4896.160 Electron/18.3.5.17-1a44cfa97d Safari/537.36 Channel/pckk_other_ch'
+
+// 天翼云盘通用请求头
+const build189Header = (cookieStr, { referer = false, signType = false } = {}) => {
+  const header = {
+    'Accept': 'application/json;charset=UTF-8',
+    'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
+    Connection: 'keep-alive',
+    Cookie: cookieStr,
+    Host: 'cloud.189.cn',
+    Priority: 'u=0',
+    'Sec-Fetch-Dest': 'empty',
+    'Sec-Fetch-Mode': 'cors',
+    'Sec-Fetch-Site': 'same-origin',
+    TE: 'trailers',
+    'User-Agent': UA_189,
+  }
+  if (referer) {
+    header.Referer = 'https://cloud.189.cn/web/main/file/folder/-11'
+  }
+  if (signType) {
+    header['Sign-Type'] = '1'
+  }
+  return header
+}
+
+// 夸克网盘通用请求头
+const buildQuarkHeader = (cookieStr, { host = 'drive-pc.quark.cn', referer = 'https://pan.quark.cn/', json = false } = {}) => {
+  const header = {
+    'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
+    Connection: 'keep-alive',
+    Cookie: cookieStr,
+    Host: host,
+    Referer: referer,
+    'User-Agent': UA_QUARK,
+  }
+  if (json) {
+    header['Content-Type'] = 'application/json;charset=utf-8'
+  }
+  return header
+}
+
+const build189Cookie = cookieInfo =>
+  buildCookie({
+    JSESSIONID: cookieInfo.JSESSIONID,
+    COOKIE_LOGIN_USER: cookieInfo.COOKIE_LOGIN_USER,
+  })
+
 // 工具函数：生成随机数字字符串
 const generateRandomDigits = (length = 16) => {
   return Array.from({ length }, () => Math.floor(Math.random() * 10)).join('')
@@ -91,440 +184,78 @@ const loginUser = webdavInfo => {
 
 //天翼云盘
 const get189Folder = (data, cookieInfo) => {
-  const cookieStr = buildCookie({
-    JSESSIONID: cookieInfo.JSESSIONID,
-    COOKIE_LOGIN_USER: cookieInfo.COOKIE_LOGIN_USER,
-  })
-  const header = {
-    'Accept': 'application/json;charset=UTF-8',
-    'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
-    'Connection': 'keep-alive',
-    'Cookie': cookieStr,
-    'Host': 'cloud.189.cn',
-    'Priority': 'u=0',
-    // 'Referer': 'https://cloud.189.cn/web/main/file/folder/-11',
-    'Sec-Fetch-Dest': 'empty',
-    'Sec-Fetch-Mode': 'cors',
-    'Sec-Fetch-Site': 'same-origin',
-    'Sign-Type': '1',
-    'TE': 'trailers',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0',
-  }
-  return new Promise((resolve, reject) => {
-    if (CONFIG.PLATFORM === 'PC') {
-      ipc
-        .invoke(ipcApiRoute.httpRequest, {
-          url: `${CONFIG.Folder189Url}&folderId=${data.folderId}&pageNum=${data.pageNum || 1}&pageSize=${data.pageSize || 1000}`,
-          method: 'GET',
-          header,
-          options: {
-            timeout: 3000,
-          },
-        })
-        .then(res => {
-          if (res.code === 200) {
-            resolve(res.data)
-          } else {
-            reject(res)
-          }
-        })
-        .catch(error => {
-          reject(error)
-        })
-    } else {
-      uni.request({
-        url: `${CONFIG.Folder189Url}&folderId=${data.folderId}&pageNum=${data.pageNum || 1}&pageSize=${data.pageSize || 1000}`,
-        timeout: 3000,
-        method: 'GET',
-        header,
-        success: res => {
-          resolve(res.data)
-        },
-        fail: error => {
-          reject(error)
-        },
-      })
-    }
+  return httpRequest(`${CONFIG.Folder189Url}&folderId=${data.folderId}&pageNum=${data.pageNum || 1}&pageSize=${data.pageSize || 1000}`, {
+    method: 'GET',
+    header: build189Header(build189Cookie(cookieInfo), { signType: true }),
+    timeout: 3000,
   })
 }
 
 //天翼云盘获取视频链接
 const get189VideoUrl = (data, cookieInfo) => {
   const randomDigits = generateRandomDigits()
-  const cookieStr = buildCookie({
-    JSESSIONID: cookieInfo.JSESSIONID,
-    COOKIE_LOGIN_USER: cookieInfo.COOKIE_LOGIN_USER,
-  })
-  const header = {
-    Accept: 'application/json;charset=UTF-8',
-    'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
-    Connection: 'keep-alive',
-    Cookie: cookieStr,
-    Host: 'cloud.189.cn',
-    Priority: 'u=0',
-    // Referer: "https://cloud.189.cn/web/main/file/folder/-11",
-    'Sec-Fetch-Dest': 'empty',
-    'Sec-Fetch-Mode': 'cors',
-    'Sec-Fetch-Site': 'same-origin',
-    'Sign-Type': '1',
-    TE: 'trailers',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0',
-  }
-  return new Promise((resolve, reject) => {
-    if (CONFIG.PLATFORM === 'PC') {
-      ipc
-        .invoke(ipcApiRoute.httpRequest, {
-          url: `${CONFIG.Video189Url}?noCache=0.${randomDigits}&fileId=${data.folderFileId}&type=2`,
-          method: 'GET',
-          header,
-          options: {
-            timeout: 5000,
-          },
-        })
-        .then(res => {
-          if (res.code === 200) {
-            resolve(res.data)
-          } else {
-            reject(res)
-          }
-        })
-        .catch(error => {
-          reject(error)
-        })
-    } else {
-      uni.request({
-        url: `${CONFIG.Video189Url}?noCache=0.${randomDigits}&fileId=${data.folderFileId}&type=2`,
-        timeout: 5000,
-        method: 'GET',
-        header,
-        success: res => {
-          resolve(res.data)
-        },
-        fail: error => {
-          reject(error)
-        },
-      })
-    }
+  return httpRequest(`${CONFIG.Video189Url}?noCache=0.${randomDigits}&fileId=${data.folderFileId}&type=2`, {
+    method: 'GET',
+    header: build189Header(build189Cookie(cookieInfo), { signType: true }),
+    timeout: 5000,
   })
 }
 
 //天翼云盘获取用户信息
 const get189User = obj => {
   const randomDigits = generateRandomDigits()
-  const cookieStr = buildCookie({
-    JSESSIONID: obj.JSESSIONID,
-    COOKIE_LOGIN_USER: obj.COOKIE_LOGIN_USER,
-  })
-  const header = {
-    Accept: 'application/json;charset=UTF-8',
-    'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
-    Connection: 'keep-alive',
-    Cookie: cookieStr,
-    Host: 'cloud.189.cn',
-    Priority: 'u=0',
-    Referer: 'https://cloud.189.cn/web/main/file/folder/-11',
-    'Sec-Fetch-Dest': 'empty',
-    'Sec-Fetch-Mode': 'cors',
-    'Sec-Fetch-Site': 'same-origin',
-    TE: 'trailers',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0',
-  }
-  return new Promise((resolve, reject) => {
-    if (CONFIG.PLATFORM === 'PC') {
-      ipc
-        .invoke(ipcApiRoute.httpRequest, {
-          url: `${CONFIG.User189Url}?noCache=0.${randomDigits}`,
-          method: 'GET',
-          header,
-          options: {
-            timeout: 3000,
-          },
-        })
-        .then(res => {
-          if (res.code === 200) {
-            resolve(res.data)
-          } else {
-            reject(res)
-          }
-        })
-        .catch(error => {
-          reject(error)
-        })
-    } else {
-      uni.request({
-        url: `${CONFIG.User189Url}?noCache=0.${randomDigits}`,
-        timeout: 3000,
-        header,
-        success: res => {
-          resolve(res.data)
-        },
-        fail: error => {
-          reject(error)
-        },
-      })
-    }
+  return httpRequest(`${CONFIG.User189Url}?noCache=0.${randomDigits}`, {
+    method: 'GET',
+    header: build189Header(build189Cookie(obj), { referer: true }),
+    timeout: 3000,
   })
 }
 
 //天翼云盘获取文件下载链接
 const get189DownloadUrl = (data, cookieInfo) => {
   const randomDigits = generateRandomDigits()
-  const cookieStr = buildCookie({
-    JSESSIONID: cookieInfo.JSESSIONID,
-    COOKIE_LOGIN_USER: cookieInfo.COOKIE_LOGIN_USER,
-  })
-  const header = {
-    Accept: 'application/json;charset=UTF-8',
-    'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
-    Connection: 'keep-alive',
-    Cookie: cookieStr,
-    Host: 'cloud.189.cn',
-    Priority: 'u=0',
-    'Sec-Fetch-Dest': 'empty',
-    'Sec-Fetch-Mode': 'cors',
-    'Sec-Fetch-Site': 'same-origin',
-    'Sign-Type': '1',
-    TE: 'trailers',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 Firefox/135.0',
-  }
-  return new Promise((resolve, reject) => {
-    if (CONFIG.PLATFORM === 'PC') {
-      ipc
-        .invoke(ipcApiRoute.httpRequest, {
-          url: `${CONFIG.Download189Url}?noCache=0.${randomDigits}&fileId=${data.folderFileId}`,
-          method: 'GET',
-          header,
-          options: {
-            timeout: 5000,
-          },
-        })
-        .then(res => {
-          if (res.code === 200) {
-            resolve(res.data)
-          } else {
-            reject(res)
-          }
-        })
-        .catch(error => {
-          reject(error)
-        })
-    } else {
-      uni.request({
-        url: `${CONFIG.Download189Url}?noCache=0.${randomDigits}&fileId=${data.folderFileId}`,
-        timeout: 5000,
-        method: 'GET',
-        header,
-        success: res => {
-          resolve(res.data)
-        },
-        fail: error => {
-          reject(error)
-        },
-      })
-    }
+  return httpRequest(`${CONFIG.Download189Url}?noCache=0.${randomDigits}&fileId=${data.folderFileId}`, {
+    method: 'GET',
+    header: build189Header(build189Cookie(cookieInfo), { signType: true }),
+    timeout: 5000,
   })
 }
 
 //夸克网盘
 const getQuarkFolder = (data, cookieInfo) => {
-  let cookieStr = cookieInfo.Cookie
-  const header = {
-    'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
-    'Connection': 'Keep-Alive',
-    'Cookie': cookieStr,
-    'Host': 'drive-pc.quark.cn',
-    'Referer': 'https://pan.quark.cn/',
-    'User-Agent':
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) quark-cloud-drive/3.2.7 Chrome/100.0.4896.160 Electron/18.3.5.17-1a44cfa97d Safari/537.36 Channel/pckk_other_ch',
-  }
-  return new Promise((resolve, reject) => {
-    if (CONFIG.PLATFORM === 'PC') {
-      ipc
-        .invoke(ipcApiRoute.httpRequest, {
-          url: `${CONFIG.QuarkFolderUrl}&pdir_fid=${data.fid}&_page=${data.pageNum || 1}&_size=${data.pageSize || 1000}`,
-          method: 'GET',
-          header: header,
-          options: {
-            timeout: 3000,
-          },
-        })
-        .then(res => {
-          if (res.code === 200) {
-            resolve(res.data)
-          } else {
-            reject(res)
-          }
-        })
-        .catch(error => {
-          reject(error)
-        })
-    } else {
-      uni.request({
-        url: `${CONFIG.QuarkFolderUrl}&pdir_fid=${data.fid}&_page=${data.pageNum || 1}&_size=${data.pageSize || 1000}`,
-        timeout: 3000,
-        method: 'GET',
-        header: header,
-        success: res => {
-          resolve(res.data)
-        },
-        fail: error => {
-          reject(error)
-        },
-      })
-    }
+  return httpRequest(`${CONFIG.QuarkFolderUrl}&pdir_fid=${data.fid}&_page=${data.pageNum || 1}&_size=${data.pageSize || 1000}`, {
+    method: 'GET',
+    header: buildQuarkHeader(cookieInfo.Cookie),
+    timeout: 3000,
   })
 }
 
 //夸克网盘获取视频或者文件下载链接
 const getQuarkVideoUrl = (data, cookieInfo) => {
-  const header = {
-    'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
-    Connection: 'keep-alive',
-    'Content-Type': 'application/json;charset=utf-8',
-    Cookie: cookieInfo.Cookie,
-    Host: 'drive-pc.quark.cn',
-    Referer: 'https://pan.quark.cn/',
-    'User-Agent':
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) quark-cloud-drive/3.2.7 Chrome/100.0.4896.160 Electron/18.3.5.17-1a44cfa97d Safari/537.36 Channel/pckk_other_ch',
-  }
-  return new Promise((resolve, reject) => {
-    if (CONFIG.PLATFORM === 'PC') {
-      ipc
-        .invoke(ipcApiRoute.httpRequest, {
-          url: CONFIG.QuarkVideoUrl,
-          timeout: 5000,
-          data: JSON.stringify({ fids: [data.folderFileId], speedup_session: '' }),
-          method: 'POST',
-          header,
-          options: {
-            timeout: 5000,
-          },
-        })
-        .then(res => {
-          if (res.code === 200) {
-            resolve(res.data)
-          } else {
-            reject(res)
-          }
-        })
-        .catch(error => {
-          reject(error)
-        })
-    } else {
-      uni.request({
-        url: CONFIG.QuarkVideoUrl,
-        timeout: 5000,
-        data: JSON.stringify({ fids: [data.folderFileId], speedup_session: '' }),
-        method: 'POST',
-        header,
-        success: res => {
-          resolve(res.data)
-        },
-        fail: error => {
-          reject(error)
-        },
-      })
-    }
+  return httpRequest(CONFIG.QuarkVideoUrl, {
+    method: 'POST',
+    data: JSON.stringify({ fids: [data.folderFileId], speedup_session: '' }),
+    header: buildQuarkHeader(cookieInfo.Cookie, { json: true }),
+    timeout: 5000,
   })
 }
 
 //夸克网盘获取不同清晰度的视频链接
 const getQuarkResolutionUrl = (data, cookieInfo) => {
-  const header = {
-    'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
-    Connection: 'keep-alive',
-    'Content-Type': 'application/json;charset=utf-8',
-    Cookie: cookieInfo.Cookie,
-    Host: 'drive-pc.quark.cn',
-    Referer: 'https://pan.quark.cn/',
-    'User-Agent':
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) quark-cloud-drive/3.2.7 Chrome/100.0.4896.160 Electron/18.3.5.17-1a44cfa97d Safari/537.36 Channel/pckk_other_ch',
-  }
-  return new Promise((resolve, reject) => {
-    if (CONFIG.PLATFORM === 'PC') {
-      ipc
-        .invoke(ipcApiRoute.httpRequest, {
-          url: CONFIG.QuarkResolutionUrl,
-          data: JSON.stringify({ fid: data.folderFileId, resolutions: 'normal,low,high,super,2k,4k', supports: 'fmp4,m3u8' }),
-          method: 'POST',
-          header,
-          options: {
-            timeout: 5000,
-          },
-        })
-        .then(res => {
-          if (res.code === 200) {
-            resolve(res.data)
-          } else {
-            reject(res)
-          }
-        })
-        .catch(error => {
-          reject(error)
-        })
-    } else {
-      uni.request({
-        url: CONFIG.QuarkResolutionUrl,
-        timeout: 5000,
-        data: JSON.stringify({ fid: data.folderFileId, resolutions: 'normal,low,high,super,2k,4k', supports: 'fmp4,m3u8' }),
-        method: 'POST',
-        header,
-        success: res => {
-          resolve(res.data)
-        },
-        fail: error => {
-          reject(error)
-        },
-      })
-    }
+  return httpRequest(CONFIG.QuarkResolutionUrl, {
+    method: 'POST',
+    data: JSON.stringify({ fid: data.folderFileId, resolutions: 'normal,low,high,super,2k,4k', supports: 'fmp4,m3u8' }),
+    header: buildQuarkHeader(cookieInfo.Cookie, { json: true }),
+    timeout: 5000,
   })
 }
 
 //夸克网盘获取用户信息
 const getQuarkUser = obj => {
-  let cookieStr = obj.Cookie
-  const header = {
-    'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
-    Connection: 'Keep-Alive',
-    'Cookie': cookieStr,
-    'Host': 'pan.quark.cn',
-    Referer: 'https://pan.quark.cn/list',
-    'User-Agent':
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) quark-cloud-drive/3.2.7 Chrome/100.0.4896.160 Electron/18.3.5.17-1a44cfa97d Safari/537.36 Channel/pckk_other_ch',
-  }
-  return new Promise((resolve, reject) => {
-    if (CONFIG.PLATFORM === 'PC') {
-      ipc
-        .invoke(ipcApiRoute.httpRequest, {
-          url: CONFIG.QuarkUserUrl,
-          method: 'GET',
-          header,
-          options: {
-            timeout: 5000,
-          },
-        })
-        .then(res => {
-          if (res.code === 200) {
-            resolve(res.data)
-          } else {
-            reject(res)
-          }
-        })
-        .catch(error => {
-          reject(error)
-        })
-    } else {
-      uni.request({
-        url: CONFIG.QuarkUserUrl,
-        header,
-        success: res => {
-          resolve(res.data)
-        },
-        fail: error => {
-          reject(error)
-        },
-      })
-    }
+  return httpRequest(CONFIG.QuarkUserUrl, {
+    method: 'GET',
+    header: buildQuarkHeader(obj.Cookie, { host: 'pan.quark.cn', referer: 'https://pan.quark.cn/list' }),
+    timeout: 5000,
   })
 }
 
@@ -586,6 +317,11 @@ const toSendEmail = async (codeEncrypt, countDown, email) => {
         icon: 'none',
       })
     } else {
+      //先清掉可能残留的旧倒计时，避免定时器泄漏
+      if (timer) {
+        clearInterval(timer)
+        timer = null
+      }
       timer = setInterval(() => {
         countDown.value--
         if (countDown.value === -1) {
@@ -602,6 +338,14 @@ const toSendEmail = async (codeEncrypt, countDown, email) => {
       title: i18n.global.t('auth.pleaseInputEmailFirst'),
       icon: 'none',
     })
+  }
+}
+
+//页面卸载时调用，清理邮箱验证码倒计时定时器
+export const clearEmailTimer = () => {
+  if (timer) {
+    clearInterval(timer)
+    timer = null
   }
 }
 

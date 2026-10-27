@@ -21,7 +21,10 @@
       "Bash(command -v npx)",
       "Bash(npx -v)",
       "Bash(node ./build/build.js tv)",
-      "Bash(node node_modules/@dcloudio/vite-plugin-uni/bin/uni.js build -p app-plus)"
+      "Bash(node node_modules/@dcloudio/vite-plugin-uni/bin/uni.js build -p app-plus)",
+      "Bash(node -e \"const zh=require\\('./i18n/zh-CN.js'\\).default||require\\('./i18n/zh-CN.js'\\);const en=require\\('./i18n/en-US.js'\\).default||require\\('./i18n/en-US.js'\\);\")",
+      "Bash(node --input-type=module -e ' *)",
+      "Bash(node -e ' *)"
     ]
   }
 }

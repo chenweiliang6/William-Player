@@ -326,17 +326,28 @@ const recursionTv = async (data, parent, tvArr, selectType, selectMedia, refresh
     let result = await getFolder({ path: data.path }, selectMedia)
     if (result.data.content) {
       let shouldSkip = false // 全局标记跳过继续循环
-      await Promise.allSettled(
-        result.data.content.map(async child => {
-          if (shouldSkip) return
-          child.provider = result.data.provider
-          child.path = data.path + '/' + child.name
-          if (child.type == '1') {
-            await recursionTv(child, data, tvArr, selectType, selectMedia, refreshData)
-          } else {
-            if (!shouldSkip && videoFormat.some(v => child.name.includes(v))) {
-              shouldSkip = true
-              if (startsWithSeasonFormat(data.name)) {
+      for (const child of result.data.content) {
+        if (shouldSkip) break
+        child.provider = result.data.provider
+        child.path = data.path + '/' + child.name
+        if (child.type == '1') {
+          await recursionTv(child, data, tvArr, selectType, selectMedia, refreshData)
+        } else {
+          if (!shouldSkip && videoFormat.some(v => child.name.includes(v))) {
+            shouldSkip = true
+            if (startsWithSeasonFormat(data.name)) {
+              if (!tvArr.find(j => j.path == parent.path)) {
+                refreshData.found++
+              }
+              tvArr.push({
+                ...parent,
+                createTime: dayjs(parent.created).format('YYYY-MM-DD HH:mm:ss'),
+                updateTime: dayjs(parent.modified).format('YYYY-MM-DD HH:mm:ss'),
+                season: extractSeasonNumber(data.name),
+                seasonPath: parent.path + '/' + data.name,
+              })
+            } else {
+              if (data.name.includes(handleSeasonName(parent.name))) {
                 if (!tvArr.find(j => j.path == parent.path)) {
                   refreshData.found++
                 }
@@ -348,54 +359,51 @@ const recursionTv = async (data, parent, tvArr, selectType, selectMedia, refresh
                   seasonPath: parent.path + '/' + data.name,
                 })
               } else {
-                if (data.name.includes(handleSeasonName(parent.name))) {
-                  if (!tvArr.find(j => j.path == parent.path)) {
-                    refreshData.found++
-                  }
-                  tvArr.push({
-                    ...parent,
-                    createTime: dayjs(parent.created).format('YYYY-MM-DD HH:mm:ss'),
-                    updateTime: dayjs(parent.modified).format('YYYY-MM-DD HH:mm:ss'),
-                    season: extractSeasonNumber(data.name),
-                    seasonPath: parent.path + '/' + data.name,
-                  })
-                } else {
-                  refreshData.found++
-                  tvArr.push({
-                    ...data,
-                    createTime: dayjs(data.created).format('YYYY-MM-DD HH:mm:ss'),
-                    updateTime: dayjs(data.modified).format('YYYY-MM-DD HH:mm:ss'),
-                    season: '1',
-                    seasonPath: data.path,
-                  })
-                }
+                refreshData.found++
+                tvArr.push({
+                  ...data,
+                  createTime: dayjs(data.created).format('YYYY-MM-DD HH:mm:ss'),
+                  updateTime: dayjs(data.modified).format('YYYY-MM-DD HH:mm:ss'),
+                  season: '1',
+                  seasonPath: data.path,
+                })
               }
             }
           }
-        })
-      )
+        }
+      }
     }
   } else if (selectType.type == '天翼云盘') {
     let result = await get189Folder({ folderId: data.id }, selectMedia)
     if (result.fileListAO.folderList) {
-      await Promise.allSettled(
-        result.fileListAO.folderList.map(async child => {
-          child.provider = '189CloudPC'
-          child.path = data.path + '/' + child.name
-          await recursionTv(child, data, tvArr, selectType, selectMedia, refreshData)
-        })
-      )
+      for (const child of result.fileListAO.folderList) {
+        child.provider = '189CloudPC'
+        child.path = data.path + '/' + child.name
+        await recursionTv(child, data, tvArr, selectType, selectMedia, refreshData)
+      }
     }
     if (result.fileListAO.fileList) {
       let shouldSkip = false // 全局标记跳过继续循环
-      await Promise.allSettled(
-        result.fileListAO.fileList.map(async child => {
-          if (shouldSkip) return
-          child.path = data.path + '/' + child.name
-          child.provider = '189CloudPC'
-          if (!shouldSkip && videoFormat.some(v => child.name.includes(v))) {
-            shouldSkip = true
-            if (startsWithSeasonFormat(data.name)) {
+      for (const child of result.fileListAO.fileList) {
+        if (shouldSkip) break
+        child.path = data.path + '/' + child.name
+        child.provider = '189CloudPC'
+        if (!shouldSkip && videoFormat.some(v => child.name.includes(v))) {
+          shouldSkip = true
+          if (startsWithSeasonFormat(data.name)) {
+            if (!tvArr.find(j => j.path == parent.path)) {
+              refreshData.found++
+            }
+            tvArr.push({
+              ...parent,
+              createTime: dayjs(parent.createDate).format('YYYY-MM-DD HH:mm:ss'),
+              updateTime: dayjs(parent.lastOpTime).format('YYYY-MM-DD HH:mm:ss'),
+              folderFileId: data.id,
+              season: extractSeasonNumber(data.name),
+              seasonPath: parent.path + '/' + data.name,
+            })
+          } else {
+            if (data.name.includes(handleSeasonName(parent.name))) {
               if (!tvArr.find(j => j.path == parent.path)) {
                 refreshData.found++
               }
@@ -408,33 +416,19 @@ const recursionTv = async (data, parent, tvArr, selectType, selectMedia, refresh
                 seasonPath: parent.path + '/' + data.name,
               })
             } else {
-              if (data.name.includes(handleSeasonName(parent.name))) {
-                if (!tvArr.find(j => j.path == parent.path)) {
-                  refreshData.found++
-                }
-                tvArr.push({
-                  ...parent,
-                  createTime: dayjs(parent.createDate).format('YYYY-MM-DD HH:mm:ss'),
-                  updateTime: dayjs(parent.lastOpTime).format('YYYY-MM-DD HH:mm:ss'),
-                  folderFileId: data.id,
-                  season: extractSeasonNumber(data.name),
-                  seasonPath: parent.path + '/' + data.name,
-                })
-              } else {
-                refreshData.found++
-                tvArr.push({
-                  ...data,
-                  createTime: dayjs(data.createDate).format('YYYY-MM-DD HH:mm:ss'),
-                  updateTime: dayjs(data.lastOpTime).format('YYYY-MM-DD HH:mm:ss'),
-                  folderFileId: data.id,
-                  season: '1',
-                  seasonPath: data.path,
-                })
-              }
+              refreshData.found++
+              tvArr.push({
+                ...data,
+                createTime: dayjs(data.createDate).format('YYYY-MM-DD HH:mm:ss'),
+                updateTime: dayjs(data.lastOpTime).format('YYYY-MM-DD HH:mm:ss'),
+                folderFileId: data.id,
+                season: '1',
+                seasonPath: data.path,
+              })
             }
           }
-        })
-      )
+        }
+      }
     }
   } else if (selectType.type == '夸克网盘') {
     let result = await getQuarkFolder({ fid: data.id }, selectMedia)
@@ -443,15 +437,27 @@ const recursionTv = async (data, parent, tvArr, selectType, selectMedia, refresh
         return { id: v.fid, name: v.file_name, path: data.path + '/' + v.file_name, provider: 'Quark', size: v.size, file_type: v.file_type }
       })
       let shouldSkip = false // 全局标记跳过继续循环
-      await Promise.allSettled(
-        result.data.list.map(async child => {
-          if (shouldSkip) return
-          if (child.file_type == '0') {
-            await recursionTv(child, data, tvArr, selectType, selectMedia, refreshData)
-          } else {
-            if (!shouldSkip && videoFormat.some(v => child.name.includes(v))) {
-              shouldSkip = true
-              if (startsWithSeasonFormat(data.name)) {
+      for (const child of result.data.list) {
+        if (shouldSkip) break
+        if (child.file_type == '0') {
+          await recursionTv(child, data, tvArr, selectType, selectMedia, refreshData)
+        } else {
+          if (!shouldSkip && videoFormat.some(v => child.name.includes(v))) {
+            shouldSkip = true
+            if (startsWithSeasonFormat(data.name)) {
+              if (!tvArr.find(j => j.path == parent.path)) {
+                refreshData.found++
+              }
+              tvArr.push({
+                ...parent,
+                createTime: dayjs(parent.created_at).format('YYYY-MM-DD HH:mm:ss'),
+                updateTime: dayjs(parent.updated_at).format('YYYY-MM-DD HH:mm:ss'),
+                folderFileId: data.id,
+                season: extractSeasonNumber(data.name),
+                seasonPath: parent.path + '/' + data.name,
+              })
+            } else {
+              if (data.name.includes(handleSeasonName(parent.name))) {
                 if (!tvArr.find(j => j.path == parent.path)) {
                   refreshData.found++
                 }
@@ -464,35 +470,20 @@ const recursionTv = async (data, parent, tvArr, selectType, selectMedia, refresh
                   seasonPath: parent.path + '/' + data.name,
                 })
               } else {
-                if (data.name.includes(handleSeasonName(parent.name))) {
-                  if (!tvArr.find(j => j.path == parent.path)) {
-                    refreshData.found++
-                  }
-                  tvArr.push({
-                    ...parent,
-                    createTime: dayjs(parent.created_at).format('YYYY-MM-DD HH:mm:ss'),
-                    updateTime: dayjs(parent.updated_at).format('YYYY-MM-DD HH:mm:ss'),
-                    folderFileId: data.id,
-                    season: extractSeasonNumber(data.name),
-                    seasonPath: parent.path + '/' + data.name,
-                  })
-                } else {
-                  refreshData.found++
-                  tvArr.push({
-                    ...data,
-                    createTime: dayjs(data.created_at).format('YYYY-MM-DD HH:mm:ss'),
-                    updateTime: dayjs(data.updated_at).format('YYYY-MM-DD HH:mm:ss'),
-                    folderFileId: data.id,
-                    season: '1',
-                    seasonPath: data.path,
-                  })
-                }
+                refreshData.found++
+                tvArr.push({
+                  ...data,
+                  createTime: dayjs(data.created_at).format('YYYY-MM-DD HH:mm:ss'),
+                  updateTime: dayjs(data.updated_at).format('YYYY-MM-DD HH:mm:ss'),
+                  folderFileId: data.id,
+                  season: '1',
+                  seasonPath: data.path,
+                })
               }
-              return
             }
           }
-        })
-      )
+        }
+      }
     }
   }
 }
@@ -604,4 +595,5 @@ export {
   recursionTv,
   formatSecondTime,
   classifyList,
+  extractSeasonNumber,
 }

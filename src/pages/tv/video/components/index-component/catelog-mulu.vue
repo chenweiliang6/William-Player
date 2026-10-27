@@ -71,8 +71,8 @@ const iconIndex = ref(-1) //表示swipe右侧的那些图标的索引
 //获取存在本地的目录数据
 const getMuluData = () => {
   muluData.value = uni.getStorageSync('muluData') || {}
-  muluData.value?.tv ? '' : (muluData.value.tv = [])
-  muluData.value?.movie ? '' : (muluData.value.movie = [])
+  if (!muluData.value.tv) muluData.value.tv = []
+  if (!muluData.value.movie) muluData.value.movie = []
   listData.value = muluData.value[catalogType.value]
 }
 

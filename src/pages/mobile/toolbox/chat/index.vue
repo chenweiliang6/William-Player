@@ -300,9 +300,9 @@ const handleMessage = message => {
     if (chatList.value[0].content.some(i => i.type === 'thinking')) {
       chatList.value[0].status = 'complete'
       chatList.value[0].content[0].data.title = t('video.thinkingCompleted')
-      message.content ? (chatList.value[0].content[1].data += message.content) : ''
+      if (message.content) chatList.value[0].content[1].data += message.content
     } else {
-      message.content ? (chatList.value[0].content[0].data += message.content) : ''
+      if (message.content) chatList.value[0].content[0].data += message.content
     }
   }
 }

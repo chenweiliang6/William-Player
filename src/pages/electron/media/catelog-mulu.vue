@@ -308,8 +308,8 @@ const back = () => {
 
 onBeforeMount(() => {
   muluData.value = uni.getStorageSync('muluData') || {}
-  muluData.value?.tv ? '' : (muluData.value.tv = [])
-  muluData.value?.movie ? '' : (muluData.value.movie = [])
+  if (!muluData.value.tv) muluData.value.tv = []
+  if (!muluData.value.movie) muluData.value.movie = []
   listData.value = muluData.value[catalogType.value]
 })
 

@@ -120,7 +120,7 @@
 
 <script setup>
 import { useRoute, useRouter } from 'vue-router'
-import { useVideoDetail } from '@/hooks/userVideoDetail'
+import { useVideoDetail } from '@/hooks/useVideoDetail'
 import { onBeforeMount } from 'vue'
 import * as CONFIG from '@/utils/config'
 import { ref } from 'vue'

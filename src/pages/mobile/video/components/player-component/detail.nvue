@@ -215,7 +215,7 @@ export default {
           this.detailData.name = this.detailData.name + ' 特别篇'
           this.detailData.poster = IMG_DOMAIN + '/t/p/w300_and_h450_bestv2' + this.seasonData.poster_path
         }
-        this.seasonData.season_number != 1 && this.seasonData.overview ? (this.detailData.overview = this.seasonData.overview) : ''
+        if (this.seasonData.season_number != 1 && this.seasonData.overview) this.detailData.overview = this.seasonData.overview
       }
     },
     changeVideo(item, index) {
@@ -321,7 +321,7 @@ export default {
             if (newVal.season_number > 1) {
               this.detailData.name = this.detailData.name + ` 第${numberMapping[String(newVal.season_number)]}季`
             }
-            newVal.season_number > 1 && newVal.overview ? (this.detailData.overview = newVal.overview) : ''
+            if (newVal.season_number > 1 && newVal.overview) this.detailData.overview = newVal.overview
           }
         }
       },

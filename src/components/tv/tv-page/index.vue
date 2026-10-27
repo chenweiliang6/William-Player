@@ -45,7 +45,7 @@ export default {
 };
 </script>
 <script module="whole" lang="renderjs">
-import { PLATFORM } from '../../../utils/config.js'
+import { IS_TV } from '../../../utils/config.js'
 	let code = null;
 	let KeyName = {
 		19: 'KeyUp',
@@ -69,7 +69,7 @@ import { PLATFORM } from '../../../utils/config.js'
 		mounted() {
 			console.log("监听");
 			//动态计算电视端的html标签的font-size，用于适配，720p，1080p，2k，4k
-			if (PLATFORM === 'TV') {
+			if (IS_TV) {
 				let fontSize = window.innerWidth / 1280 * 16 + 'px'
 				document.documentElement.style.setProperty('--tv-fontsize', fontSize);
 			}

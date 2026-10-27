@@ -1,11 +1,13 @@
 import { computed, onBeforeMount, ref, nextTick, watch } from 'vue'
 import { loginUser, getFolder, get189Folder, getQuarkFolder, getTvSeason, getMovieTvById } from '@/utils/common'
-import { parseTime, calTime, handleSecond, handleSeasonName, generateChineseNumberMapping } from '@/utils/scrape'
-import { onShow, onLoad } from '@dcloudio/uni-app'
+import { parseTime, calTime, handleSecond, handleSeasonName, extractSeasonNumber, generateChineseNumberMapping } from '@/utils/scrape'
+import { onShow, onLoad, onUnload } from '@dcloudio/uni-app'
 import editIcon from '@/static/edit_icon.png'
 import timeIcon from '@/static/time_icon.png'
 import downloadIcon from '@/static/download-icon.png'
 import { toStringfy } from '@/pages/mobile/mine/common'
+import { useSourceSelect } from '@/hooks/useSourceSelect'
+import { useHistoryStore } from '@/stores/historyPlay'
 import * as CONFIG from '@/utils/config'
 import { ipc } from '@/utils/ipcRenderer'
 import { ipcApiRoute } from '@/utils/ipcApiRoute'
@@ -14,28 +16,11 @@ import { useI18n } from 'vue-i18n'
 import { useLocaleStore } from '@/stores/locale'
 
 // 过滤掉同一部内容的旧历史记录
-const filterDuplicateHistory = (historyArr, historyItem) => {
-  if (historyItem.type === 'tv') {
-    // 电视剧：按 titlePlay + season + sourceName 去重
-    return historyArr.filter(item =>
-      !(item.type === 'tv' &&
-        item.titlePlay === historyItem.titlePlay &&
-        item.season === historyItem.season &&
-        item.sourceName === historyItem.sourceName)
-    )
-  } else {
-    // 电影：按 name + sourceName 去重
-    return historyArr.filter(item =>
-      !(item.type === 'movie' &&
-        item.name === historyItem.name &&
-        item.sourceName === historyItem.sourceName)
-    )
-  }
-}
-
 export function useVideoDetail({ route, router }) {
   const { t } = useI18n()
   const localeStore = useLocaleStore()
+  const historyStore = useHistoryStore()
+  let onShowTimer = null //返回本页时同步按钮状态的延迟任务，页面卸载时需清理
   const showPopover = ref(false)
   const getPopoverArr = () => {
     const list = [
@@ -99,7 +84,6 @@ export function useVideoDetail({ route, router }) {
     } else if (item.key == 'skipIntro') {
       let localMovieTvData = uni.getStorageSync('localMovieTvData')
       let nowTv = localMovieTvData.tv.find(i => i.movieTvId == routerParams.value.movieTvId)
-      console.log(nowTv, 'nowTv')
       if (nowTv.openingTime) {
         const minutes = String(Math.floor(nowTv.openingTime / 60)) // 取整分钟数
         const remainingSeconds = String(nowTv.openingTime % 60) // 剩余秒数
@@ -187,21 +171,7 @@ export function useVideoDetail({ route, router }) {
       season = localMovieTvData.value.tv.find(i => i.movieTvId == routerParams.value.movieTvId).season
       season = season != '1' ? season : activeSeason.value.season
     } else {
-      const numberMapping = generateChineseNumberMapping(40, 'string')
-      const match = imgData.value.title.match(/第([一二三四五六七八九十\d]+)季/)
-      if (match) {
-        if (!isNaN(Number(match[1])) && match[1].trim() !== '') {
-          season = match[1]
-        } else {
-          season = numberMapping[match[1]]
-        }
-      } else {
-        if (imgData.value.title.indexOf('特别篇') > -1) {
-          season = '0'
-        } else {
-          season = '1'
-        }
-      }
+      season = extractSeasonNumber(imgData.value.title)
       season = season != '1' ? season : activeSeason.value.season
     }
     return season
@@ -258,7 +228,7 @@ export function useVideoDetail({ route, router }) {
       vote_average: res1.vote_average,
     }
     uni.setStorageSync('seasonData', seasonData)
-    season != '1' && res1.overview ? (overview.value = res1.overview) : ''
+    if (season != '1' && res1.overview) overview.value = res1.overview
     return res1
   }
 
@@ -342,15 +312,13 @@ export function useVideoDetail({ route, router }) {
     const season = determineSeason()
     let res1 = {}
     //获取季数据，并且设置给某些参数，把res1传进去，获取到季的数据
-    getSeasonData(seasonData1, season).then(seasonRes => {
-      res1 = seasonRes
-    })
+    res1 = await getSeasonData(seasonData1, season)
     await getTvlist(selectType.value.type)
     imgData.value.runtime = t('video.totalEpisodesInLibrary', { total: res1?.episodes?.length || 0, count: tvList.value?.length || 0 })
     //处理现有的集数，将tmdb的封面，时长都设置进去，还有每一集的标题
     processTvlist(res1)
     nextTick(() => {
-      historyTv.value.name ? (scrollIntoView.value = 'name' + historyTv.value.ji) : ''
+      if (historyTv.value.name) scrollIntoView.value = 'name' + historyTv.value.ji
     })
   }
 
@@ -416,7 +384,7 @@ export function useVideoDetail({ route, router }) {
     setButtonText()
     await handleTv()
     nextTick(() => {
-      historyTv.value.name ? (scrollIntoView.value = 'name' + historyTv.value.ji) : (scrollIntoView.value = 'name1')
+      scrollIntoView.value = historyTv.value.name ? 'name' + historyTv.value.ji : 'name1'
     })
   }
 
@@ -431,7 +399,7 @@ export function useVideoDetail({ route, router }) {
     setButtonText()
     await handleTv()
     nextTick(() => {
-      historyTv.value.name ? (scrollIntoView.value = 'name' + historyTv.value.ji) : (scrollIntoView.value = 'name1')
+      scrollIntoView.value = historyTv.value.name ? 'name' + historyTv.value.ji : 'name1'
     })
   }
 
@@ -444,125 +412,115 @@ export function useVideoDetail({ route, router }) {
   }
 
   //点击播放按钮
+  //构造片头片尾参数及其 URL 查询串
+  const buildOpenEndTime = nowTv => {
+    let openEndTime = {}
+    if (!routerParams.value.movieTvId) openEndTime.noSetHistory = 0
+    if (nowTv.openingTime >= 0) openEndTime.openingTime = nowTv.openingTime
+    if (nowTv.endTime >= 0) openEndTime.endTime = nowTv.endTime
+    return toStringfy(openEndTime) ? '&' + toStringfy(openEndTime) : ''
+  }
+
+  //电影：写历史（无记录时）并跳播放器
+  const clickPlayMovie = () => {
+    const lastIndex = routerParams.value.path.lastIndexOf('/')
+    let name = routerParams.value.path.substring(lastIndex + 1)
+    let history = historyPlay.value?.find(i => i.name == name)
+    if (!(history && selectSource.value.path == '/' + history.path)) {
+      let historyItem = {
+        path: `${selectSource.value.path.slice(1)}`,
+        poster: imgData.value.img,
+        type: 'movie',
+        name: selectSource.value.name,
+        runtime: imgData.value.runtimeEn,
+        title: selectSource.value.name,
+        initialTime: '0',
+        movieTvId: routerParams.value.movieTvId,
+        sourceType: selectType.value.type, //这个播放记录归属于哪个类型，比如webdav，天翼云盘，夸克网盘
+        sourceName: selectMedia.value.name, //这个播放记录再具体到某个类型下的哪一个
+      }
+      if (selectType.value.type != 'WebDAV') {
+        historyItem.folderFileId = selectSource.value.folderFileId
+      }
+      historyStore.push(historyItem)
+    }
+    if (selectType.value.type == 'WebDAV') {
+      uni.navigateTo({
+        url: `/pages/mobile/video/video-player?path=${selectSource.value.path.slice(1)}&type=movie`,
+      })
+    } else {
+      uni.navigateTo({
+        url: `/pages/mobile/video/video-player?path=${selectSource.value.path.slice(1)}&folderFileId=${selectSource.value.folderFileId}&type=movie`,
+      })
+    }
+  }
+
+  //电视剧：写历史（无记录时）并跳播放器
+  const clickPlayTv = () => {
+    if (!tvList.value.length) {
+      uni.showToast({
+        title: t('video.pleaseCheckCloudOrWebdav'),
+        icon: 'none',
+      })
+      return
+    }
+    uni.setStorageSync('tvList', tvList.value)
+    let localMovieTvData = uni.getStorageSync('localMovieTvData')
+    let nowTv = {}
+    if (routerParams.value.movieTvId) {
+      nowTv = localMovieTvData.tv.find(i => i.movieTvId == routerParams.value.movieTvId)
+    } else {
+      nowTv = localMovieTvData.tv.find(i => i.path == routerParams.value.path)
+    }
+    let history = historyPlay.value?.find(i => i.titlePlay == imgData.value.title)
+    //有历史且路径一致时续播，否则从第一集开始并写历史
+    const continuePlay = history && activeSeason.value.path + '/' + history.name == '/' + history.path
+    const episode = continuePlay ? history : tvList.value[0]
+    const episodeFolderFileId = continuePlay ? history.folderFileId : tvList.value[0].id
+    if (!continuePlay) {
+      let historyItem = {
+        path: `${activeSeason.value.path.slice(1)}/${tvList.value[0].name}`,
+        titlePlay: imgData.value.title,
+        ji: '1',
+        poster: tvList.value[0].poster || imgData.value.img,
+        type: 'tv',
+        name: tvList.value[0].name,
+        runtime: tvList.value[0].runtime,
+        title: tvList.value[0].title,
+        initialTime: '0',
+        movieTvId: routerParams.value.movieTvId,
+        season: activeSeason.value.season,
+        sourceType: selectType.value.type, //这个播放记录归属于哪个类型，比如webdav，天翼云盘，夸克网盘
+        sourceName: selectMedia.value.name, //这个播放记录再具体到某个类型下的哪一个
+      }
+      if (selectType.value.type != 'WebDAV') {
+        historyItem.folderFileId = tvList.value[0].id
+      }
+      historyStore.push(historyItem)
+    }
+    const queryStr = buildOpenEndTime(nowTv)
+    if (selectType.value.type == 'WebDAV') {
+      uni.navigateTo({
+        url: `/pages/mobile/video/video-player?path=${activeSeason.value.path.slice(1)}/${episode.name}&type=tv${queryStr}`,
+      })
+    } else {
+      uni.navigateTo({
+        url: `/pages/mobile/video/video-player?path=${activeSeason.value.path.slice(1)}/${episode.name}&wjjId=${activeSeason.value.folderFileId}&folderFileId=${episodeFolderFileId}&type=tv${queryStr}`,
+      })
+    }
+  }
+
   const clickPlayButton = () => {
     if (routerParams.value.type == 'movie') {
-      const lastIndex = routerParams.value.path.lastIndexOf('/')
-      let name = routerParams.value.path.substring(lastIndex + 1)
-      let history = historyPlay.value?.find(i => i.name == name)
-      if (history && selectSource.value.path == '/' + history.path) {
-        if (selectType.value.type == 'WebDAV') {
-          uni.navigateTo({
-            url: `/pages/mobile/video/video-player?path=${selectSource.value.path.slice(1)}&type=movie`,
-          })
-        } else {
-          uni.navigateTo({
-            url: `/pages/mobile/video/video-player?path=${selectSource.value.path.slice(1)}&folderFileId=${selectSource.value.folderFileId}&type=movie`,
-          })
-        }
-      } else {
-        let historyItem = {
-          path: `${selectSource.value.path.slice(1)}`,
-          poster: imgData.value.img,
-          type: 'movie',
-          name: selectSource.value.name,
-          runtime: imgData.value.runtimeEn,
-          title: selectSource.value.name,
-          initialTime: '0',
-          movieTvId: routerParams.value.movieTvId,
-          sourceType: selectType.value.type, //这个播放记录归属于哪个类型，比如webdav，天翼云盘，夸克网盘
-          sourceName: selectMedia.value.name, //这个播放记录再具体到某个类型下的哪一个
-        }
-        let historyArr = uni.getStorageSync('historyPlay') || []
-        if (selectType.value.type != 'WebDAV') {
-          historyItem.folderFileId = selectSource.value.folderFileId
-        }
-        historyArr = filterDuplicateHistory(historyArr, historyItem)
-        uni.setStorageSync('historyPlay', [historyItem, ...historyArr])
-        if (selectType.value.type == 'WebDAV') {
-          uni.navigateTo({
-            url: `/pages/mobile/video/video-player?path=${selectSource.value.path.slice(1)}&type=movie`,
-          })
-        } else {
-          uni.navigateTo({
-            url: `/pages/mobile/video/video-player?path=${selectSource.value.path.slice(1)}&folderFileId=${selectSource.value.folderFileId}&type=movie`,
-          })
-        }
-      }
+      clickPlayMovie()
     } else if (routerParams.value.type == 'tv') {
-      if (!tvList.value.length) {
-        uni.showToast({
-          title: t('video.pleaseCheckCloudOrWebdav'),
-          icon: 'none',
-        })
-        return
-      }
-      uni.setStorageSync('tvList', tvList.value)
-      let localMovieTvData = uni.getStorageSync('localMovieTvData')
-      let nowTv = {}
-      if (routerParams.value.movieTvId) {
-        nowTv = localMovieTvData.tv.find(i => i.movieTvId == routerParams.value.movieTvId)
-      } else {
-        nowTv = localMovieTvData.tv.find(i => i.path == routerParams.value.path)
-      }
-      let history = historyPlay.value?.find(i => i.titlePlay == imgData.value.title)
-      if (history && activeSeason.value.path + '/' + history.name == '/' + history.path) {
-        let openEndTime = {}
-        routerParams.value.movieTvId ? '' : (openEndTime.noSetHistory = 0)
-        nowTv.openingTime >= 0 ? (openEndTime.openingTime = nowTv.openingTime) : ''
-        nowTv.endTime >= 0 ? (openEndTime.endTime = nowTv.endTime) : ''
-        if (selectType.value.type == 'WebDAV') {
-          uni.navigateTo({
-            url: `/pages/mobile/video/video-player?path=${activeSeason.value.path.slice(1)}/${history.name}&type=tv${toStringfy(openEndTime) ? '&' + toStringfy(openEndTime) : ''}`,
-          })
-        } else {
-          uni.navigateTo({
-            url: `/pages/mobile/video/video-player?path=${activeSeason.value.path.slice(1)}/${history.name}&wjjId=${activeSeason.value.folderFileId}&folderFileId=${history.folderFileId}&type=tv${toStringfy(openEndTime) ? '&' + toStringfy(openEndTime) : ''}`,
-          })
-        }
-      } else {
-        let historyItem = {
-          path: `${activeSeason.value.path.slice(1)}/${tvList.value[0].name}`,
-          titlePlay: imgData.value.title,
-          ji: '1',
-          poster: tvList.value[0].poster || imgData.value.img,
-          type: 'tv',
-          name: tvList.value[0].name,
-          runtime: tvList.value[0].runtime,
-          title: tvList.value[0].title,
-          initialTime: '0',
-          movieTvId: routerParams.value.movieTvId,
-          season: activeSeason.value.season,
-          sourceType: selectType.value.type, //这个播放记录归属于哪个类型，比如webdav，天翼云盘，夸克网盘
-          sourceName: selectMedia.value.name, //这个播放记录再具体到某个类型下的哪一个
-        }
-        let historyArr = uni.getStorageSync('historyPlay') || []
-        if (selectType.value.type != 'WebDAV') {
-          historyItem.folderFileId = tvList.value[0].id
-        }
-        historyArr = filterDuplicateHistory(historyArr, historyItem)
-        uni.setStorageSync('historyPlay', [historyItem, ...historyArr])
-        let openEndTime = {}
-        routerParams.value.movieTvId ? '' : (openEndTime.noSetHistory = 0)
-        nowTv.openingTime >= 0 ? (openEndTime.openingTime = nowTv.openingTime) : ''
-        nowTv.endTime >= 0 ? (openEndTime.endTime = nowTv.endTime) : ''
-        if (selectType.value.type == 'WebDAV') {
-          uni.navigateTo({
-            url: `/pages/mobile/video/video-player?path=${activeSeason.value.path.slice(1)}/${tvList.value[0].name}&type=tv${toStringfy(openEndTime) ? '&' + toStringfy(openEndTime) : ''}`,
-          })
-        } else {
-          uni.navigateTo({
-            url: `/pages/mobile/video/video-player?path=${activeSeason.value.path.slice(1)}/${tvList.value[0].name}&wjjId=${activeSeason.value.folderFileId}&folderFileId=${tvList.value[0].id}&type=tv${
-              toStringfy(openEndTime) ? '&' + toStringfy(openEndTime) : ''
-            }`,
-          })
-        }
-      }
+      clickPlayTv()
     }
   }
 
   //播放电视
   const toPlayVideo = (item, index) => {
-    CONFIG.PLATFORM === 'PC' ? '' : uni.setStorageSync('tvList', tvList.value)
+    if (!CONFIG.IS_PC) uni.setStorageSync('tvList', tvList.value)
     let localMovieTvData = uni.getStorageSync('localMovieTvData')
     const nowTv = routerParams.value.movieTvId
       ? localMovieTvData.tv?.find(i => i.movieTvId == routerParams.value.movieTvId)
@@ -593,11 +551,9 @@ export function useVideoDetail({ route, router }) {
           sourceName: selectMedia.value.name,
         }
       : null
-    let historyArr = uni.getStorageSync('historyPlay') || []
     if (historyItem) {
-      isWebDAV ? '' : (historyItem.folderFileId = item.id)
-      historyArr = filterDuplicateHistory(historyArr, historyItem)
-      uni.setStorageSync('historyPlay', [historyItem, ...historyArr])
+      if (!isWebDAV) historyItem.folderFileId = item.id
+      historyStore.push(historyItem)
     }
     // 构建查询参数
     const query = {
@@ -610,7 +566,7 @@ export function useVideoDetail({ route, router }) {
       isEmby: '0'
     }
     // PC端打开MPV播放器
-    if (CONFIG.PLATFORM === 'PC') {
+    if (CONFIG.IS_PC) {
       const args = {
         type: 'vue',
         content: '/video',
@@ -618,9 +574,7 @@ export function useVideoDetail({ route, router }) {
         windowTitle: history ? t('video.nowPlaying') : 'William Player',
         query,
       }
-      ipc.invoke(ipcApiRoute.createMpv, args).then(id => {
-        console.log('[createWindow] id:', id)
-      })
+      ipc.invoke(ipcApiRoute.createMpv, args)
       return
     }
 
@@ -633,16 +587,6 @@ export function useVideoDetail({ route, router }) {
     let url = `/pages/mobile/video/video-player?path=${basePath}&type=tv`
     if (!isWebDAV) {
       url += `&wjjId=${activeSeason.value.folderFileId}&folderFileId=${item.id}`
-      if (historyItem) {
-        historyItem.folderFileId = item.id
-        historyArr = filterDuplicateHistory(historyArr, historyItem)
-        uni.setStorageSync('historyPlay', [historyItem, ...historyArr])
-      }
-    } else {
-      if (historyItem) {
-        historyArr = filterDuplicateHistory(historyArr, historyItem)
-        uni.setStorageSync('historyPlay', [historyItem, ...historyArr])
-      }
     }
 
     const queryStr = toStringfy(openEndTime)
@@ -652,8 +596,7 @@ export function useVideoDetail({ route, router }) {
 
   //设置按钮文字
   const setButtonText = () => {
-    historyPlay.value = uni.getStorageSync('historyPlay') || []
-    historyPlay.value = historyPlay.value.filter(v => v.sourceType == selectType.value.type && v.sourceName == selectMedia.value.name)
+    historyPlay.value = historyStore.readBySource(selectType.value.type, selectMedia.value.name)
     buttonTextKey.value = 'video.play'
     buttonTextParams.value = {}
     if (routerParams.value.type == 'movie') {
@@ -679,18 +622,7 @@ export function useVideoDetail({ route, router }) {
   }
 
   //判断选择的是webdav还是天翼云盘还是夸克
-  const judgeSelect = () => {
-    nowSourceList.value = uni.getStorageSync('sourceList')
-    selectType.value = nowSourceList.value.find(item => {
-      let select = item.list.find(i => i.active)
-      if (select) {
-        selectMedia.value = select
-        return true
-      } else {
-        return false
-      }
-    })
-  }
+  const { judgeSelect } = useSourceSelect({ selectType, selectMedia, sourceListRef: nowSourceList })
 
   //重新加载电视剧集数
   const reHandleTv = async () => {
@@ -710,73 +642,57 @@ export function useVideoDetail({ route, router }) {
   //重新设置影片信息
   const resetMovieTvData = async () => {
     let resetMovieTv = uni.getStorageSync('resetMovieTv')
-    if (resetMovieTv) {
-      judgeSelect()
-      let oldMovieTvId = routerParams.value.movieTvId
-      // let oldName = imgData.value.title;
-      let oldPath = routerParams.value.path
-      routerParams.value.type = resetMovieTv.type
-      routerParams.value.movieTvId = resetMovieTv.movieTvId
-      routerParams.value.name = resetMovieTv.name
-      uni.removeStorageSync('resetMovieTv')
-      selectSource.value = sourceList.value[0]
-      activeSeason.value = { ...selectSource.value.seasonArr[0] }
-      setButtonText()
-      nextTick(() => {
-        historyTv.value.name ? (scrollIntoView.value = 'name' + historyTv.value.ji) : ''
-      })
-      historyPlay.value = historyPlay.value.filter(i => i.titlePlay != imgData.value.title)
-      let historyArr = uni.getStorageSync('historyPlay') || []
-      historyArr = historyArr.filter(v => v.sourceType != selectType.value.type || v.sourceName != selectMedia.value.name)
-      uni.setStorageSync('historyPlay', [...historyArr, ...historyPlay.value])
-      selectSource.value.name = resetMovieTv.name
-      localMovieTvData.value = uni.getStorageSync('localMovieTvData') || {}
+    if (!resetMovieTv) return
+    judgeSelect()
+    let oldMovieTvId = routerParams.value.movieTvId
+    let oldPath = routerParams.value.path
+    routerParams.value.type = resetMovieTv.type
+    routerParams.value.movieTvId = resetMovieTv.movieTvId
+    routerParams.value.name = resetMovieTv.name
+    uni.removeStorageSync('resetMovieTv')
+    selectSource.value = sourceList.value[0]
+    activeSeason.value = { ...selectSource.value.seasonArr[0] }
+    setButtonText()
+    nextTick(() => {
+      if (historyTv.value.name) scrollIntoView.value = 'name' + historyTv.value.ji
+    })
+    historyPlay.value = historyPlay.value.filter(i => i.titlePlay != imgData.value.title)
+    //先把当前源之外的记录保留，再把过滤后的当前源记录接回去
+    let others = historyStore.read().filter(v => v.sourceType != selectType.value.type || v.sourceName != selectMedia.value.name)
+    historyStore.write([...others, ...historyPlay.value])
+    selectSource.value.name = resetMovieTv.name
+    localMovieTvData.value = uni.getStorageSync('localMovieTvData') || {}
 
-      if (resetMovieTv.type == 'tv') {
-        let nowTv = localMovieTvData.value.tv.find(i => i.movieTvId == oldMovieTvId && i.path == oldPath)
-        let selectSource1 = nowTv.source.find(i => i.path == selectSource.value.path)
-        selectSource1.name = resetMovieTv.name
-        const numberMapping = generateChineseNumberMapping(40, 'string')
-        const match = selectSource.value.name.match(/第([一二三四五六七八九十\d]+)季/)
-        if (match) {
-          if (!isNaN(Number(match[1])) && match[1].trim() !== '') {
-            nowTv.season = match[1]
-          } else {
-            nowTv.season = numberMapping[match[1]]
-          }
-        } else {
-          if (selectSource.value.name.indexOf('特别篇') > -1) {
-            nowTv.season = '0'
-          } else {
-            nowTv.season = '1'
-          }
-        }
-        nowTv.movieTvId = routerParams.value.movieTvId
-        let res = await getMovieTvDetail()
-        nowTv.type = '1'
-        nowTv.genre_ids = res.genres.map(i => i.id)
-        nowTv.backdrop = res.backdrop_path
-        nowTv.voteAverage = res.vote_average //评分
-        nowTv.name = resetMovieTv.name
-        let res1 = await getTvSeason({ movieTvId: routerParams.value.movieTvId, season: nowTv.season })
-        handleTv(res1)
-        nowTv.poster = res1.poster_path
-        nowTv.releaseTime = res1.air_date
-        nowTv.overview = res1.overview
-      } else if (resetMovieTv.type == 'movie') {
-        let nowMovie = localMovieTvData.value.movie.find(i => i.movieTvId == oldMovieTvId)
-        let res = await getMovieTvDetail()
-        nowMovie.poster = CONFIG.IMG_DOMAIN + '/t/p/w300_and_h450_bestv2' + res.poster_path
-        nowMovie.releaseTime = res.release_date
-        nowMovie.type = '2'
-        nowMovie.movieTvId = res.id
-        nowMovie.genre_ids = res.genres.map(i => i.id)
-        nowMovie.name = res.title
-      }
-      imgData.value.title = resetMovieTv.name
-      uni.setStorageSync('localMovieTvData', localMovieTvData.value)
-      actor_list.value.getActorList()
+    if (resetMovieTv.type == 'tv') {
+      let nowTv = localMovieTvData.value.tv.find(i => i.movieTvId == oldMovieTvId && i.path == oldPath)
+      let selectSource1 = nowTv.source.find(i => i.path == selectSource.value.path)
+      selectSource1.name = resetMovieTv.name
+      nowTv.season = extractSeasonNumber(selectSource.value.name)
+      nowTv.movieTvId = routerParams.value.movieTvId
+      let res = await getMovieTvDetail()
+      nowTv.type = '1'
+      nowTv.genre_ids = res.genres.map(i => i.id)
+      nowTv.backdrop = res.backdrop_path
+      nowTv.voteAverage = res.vote_average //评分
+      nowTv.name = resetMovieTv.name
+      let res1 = await getTvSeason({ movieTvId: routerParams.value.movieTvId, season: nowTv.season })
+      handleTv(res1)
+      nowTv.poster = res1.poster_path
+      nowTv.releaseTime = res1.air_date
+      nowTv.overview = res1.overview
+    } else if (resetMovieTv.type == 'movie') {
+      let nowMovie = localMovieTvData.value.movie.find(i => i.movieTvId == oldMovieTvId)
+      let res = await getMovieTvDetail()
+      nowMovie.poster = CONFIG.IMG_DOMAIN + '/t/p/w300_and_h450_bestv2' + res.poster_path
+      nowMovie.releaseTime = res.release_date
+      nowMovie.type = '2'
+      nowMovie.movieTvId = res.id
+      nowMovie.genre_ids = res.genres.map(i => i.id)
+      nowMovie.name = res.title
     }
+    imgData.value.title = resetMovieTv.name
+    uni.setStorageSync('localMovieTvData', localMovieTvData.value)
+    actor_list.value.getActorList()
   }
 
   const setItemWidth = () => {
@@ -796,14 +712,13 @@ export function useVideoDetail({ route, router }) {
 
   //设置selectSource，也就是选中的影片来源
   const setSelectSource = async () => {
-    if (CONFIG.PLATFORM === 'PC') {
+    if (CONFIG.IS_PC) {
       routerParams.value = route.query
     }
     let source = []
     if (routerParams.value.source) {
       //source从上一个页面传过来
       source = JSON.parse(routerParams.value.source)
-      console.log(source,'source1111')
     }
     sourceList.value = source.map(i => {
       if (source.filter(v => v.provider == i.provider).length > 1) {
@@ -854,7 +769,7 @@ export function useVideoDetail({ route, router }) {
       await handleTv()
     }
     nextTick(() => {
-      historyTv.value.name ? (scrollIntoView.value = 'name' + historyTv.value.ji) : ''
+      if (historyTv.value.name) scrollIntoView.value = 'name' + historyTv.value.ji
     })
   }
 
@@ -881,17 +796,27 @@ export function useVideoDetail({ route, router }) {
   })
 
   onShow(() => {
-    setTimeout(() => {
+    if (onShowTimer) {
+      clearTimeout(onShowTimer)
+    }
+    onShowTimer = setTimeout(() => {
       setButtonText()
       if (!firstEnter.value) {
         nextTick(() => {
-          historyTv.value.name ? (scrollIntoView.value = 'name' + historyTv.value.ji) : ''
+          if (historyTv.value.name) scrollIntoView.value = 'name' + historyTv.value.ji
         })
       }
       firstEnter.value = false
+      onShowTimer = null
     }, 800) //为什么加延迟，因为上一个页面setStorageSync的时候，不加延迟返回这个页面获取不到最新的storage
     //重新设置影片信息
     resetMovieTvData()
+  })
+  onUnload(() => {
+    if (onShowTimer) {
+      clearTimeout(onShowTimer)
+      onShowTimer = null
+    }
   })
 
   watch(

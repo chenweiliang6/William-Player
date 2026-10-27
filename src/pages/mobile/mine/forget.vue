@@ -138,7 +138,7 @@ const toSendEmail = async () => {
 }
 
 const confirmEdit = async () => {
-  formData.value.authCode ? (formData.value.authCode = encrypt(formData.value.authCode)) : ''
+  if (formData.value.authCode) formData.value.authCode = encrypt(formData.value.authCode)
   await editPwd(formData.value)
   uni.navigateBack()
 }

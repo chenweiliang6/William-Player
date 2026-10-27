@@ -151,8 +151,8 @@ const toVideoPlayer = async item => {
       )
     })
     let openEndTime = {}
-    nowTv.openingTime >= 0 ? (openEndTime.openingTime = nowTv.openingTime) : ''
-    nowTv.endTime >= 0 ? (openEndTime.endTime = nowTv.endTime) : ''
+    if (nowTv.openingTime >= 0) openEndTime.openingTime = nowTv.openingTime
+    if (nowTv.endTime >= 0) openEndTime.endTime = nowTv.endTime
     if (selectType.value.type == 'WebDAV') {
       uni.navigateTo({
         url: `/pages/mobile/video/video-player?path=${item.path}&titlePlay=${item.titlePlay}&type=tv&movieTvId=${item.movieTvId}&${toStringfy(openEndTime)}`,

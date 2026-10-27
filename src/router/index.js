@@ -5,7 +5,6 @@ const constantRoutes = [
   {
     path: '/',
     component: Layout,
-    hidden: true,
     redirect: '/entry',
     children: [
       {
@@ -127,7 +126,6 @@ const constantRoutes = [
   {
     path: '/',
     component: Layout,
-    hidden: true,
     children: [
       {
         path: 'video',

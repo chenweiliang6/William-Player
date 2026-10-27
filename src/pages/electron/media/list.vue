@@ -93,7 +93,7 @@ const changeBreadcrumb = index => {
 //点击文件夹或者文件
 const clickMedia = async item => {
   const typeArr = ['WebDAV', 'Emby', '天翼云盘', '夸克网盘']
-  typeArr.includes(item.type) ? (state.selectMedia = item) : ''
+  if (typeArr.includes(item.type)) state.selectMedia = item
   if (item.type === 'WebDAV') {
     let res = await loginUser(state.selectMedia)
     state.selectMedia.token = res.data.token

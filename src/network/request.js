@@ -25,6 +25,11 @@ const loginTour = () => {
         uni.setStorageSync('Authorization', res.data.accessToken)
         uni.setStorageSync('refreshToken', res.data.refreshToken)
         getUserByopenId(res.data.openId)
+          .then(() => resolve(res.data))
+          .catch(() => resolve(res.data))
+      },
+      fail: err => {
+        reject(err)
       },
     })
   })
@@ -50,9 +55,15 @@ const getUserByopenId = async openId => {
   }
 }
 
+//并发401时只触发一次token刷新，其余请求等待同一次刷新完成后重试
+let refreshInFlight = null
+
 //刷新token的方法
 const refreshAccess = params => {
-  return new Promise((resolve, reject) => {
+  if (refreshInFlight) {
+    return refreshInFlight.then(() => retryFail(params))
+  }
+  refreshInFlight = new Promise((resolve, reject) => {
     uni.request({
       url: base_url + '/refresh',
       method: 'post',
@@ -64,26 +75,47 @@ const refreshAccess = params => {
           if (res.data?.code === 0 || res.data?.code === 200) {
             uni.setStorageSync('Authorization', res.data.accessToken)
             uni.setStorageSync('refreshToken', res.data.refreshToken)
-            //获取到新的一对token之后，重新请求之前失败的方法
-            retryFail(params)
-              .then(res1 => {
-                resolve(res1)
-              })
-              .catch(err => {
-                reject(err)
-              })
+            resolve()
           } else if (res.data?.code === 401) {
-            //此时的情况是刷新token也过期了
-            //401说明服务器没有挂，正常走下去就行了，不需要处理异常情况
+            //此时的情况是刷新token也过期了，登录游客账号后重试原请求
             loginTour()
+              .then(() => resolve())
+              .catch(err => reject(err))
+          } else {
+            reject(res.data)
           }
+        } else {
+          reject(res.data)
         }
       },
       fail: err => {
         reject(err)
       },
     })
+  }).finally(() => {
+    refreshInFlight = null
   })
+  return refreshInFlight.then(() => retryFail(params))
+}
+
+//统一的无图标toast
+const toast = title => {
+  uni.showToast({
+    title,
+    icon: 'none',
+    duration: 2000,
+  })
+}
+
+//HTTP 200但业务码非成功时的公共处理（不含401，401由调用方处理）
+const handleBizError = (res, reject) => {
+  let code = res.data?.code
+  if (code == 404) {
+    toast(i18n.global.t('request.requestAddressNotFound'))
+  } else {
+    toast(res.data.msg)
+  }
+  reject(res.data)
 }
 
 //刷新token之后，重新执行一遍401失败的接口
@@ -108,40 +140,16 @@ const retryFail = params => {
           if (res.data?.code == 0 || res.data?.code == 200) {
             resolve(res.data)
           } else {
-            let code = res.data?.code
-            // uni.clearStorageSync()
-            if (code == 404) {
-              uni.showToast({
-                title: i18n.global.t('request.requestAddressNotFound'),
-                icon: 'none',
-                duration: 2000,
-              })
-            } else {
-              uni.showToast({
-                title: res.data.msg,
-                icon: 'none',
-                duration: 2000,
-              })
-            }
-            reject(res.data)
+            handleBizError(res, reject)
           }
         } else {
-          // uni.clearStorageSync()
           switch (res.statusCode) {
             case 404:
-              uni.showToast({
-                title: i18n.global.t('request.requestAddressNotFound'),
-                icon: 'none',
-                duration: 2000,
-              })
+              toast(i18n.global.t('request.requestAddressNotFound'))
               break
             default:
               if (res.statusCode !== 403) {
-                uni.showToast({
-                  title: i18n.global.t('request.pleaseRetry'),
-                  icon: 'none',
-                  duration: 2000,
-                })
+                toast(i18n.global.t('request.pleaseRetry'))
               }
               break
           }
@@ -192,45 +200,30 @@ export default params => {
         const res = response
         // 根据返回的状态码做出对应的操作
         //获取成功
-        // console.log(res.statusCode);
         if (res.statusCode == 200) {
           if (res.data?.code == 0 || res.data?.code == 200) {
             resolve(res.data)
           } else {
             let code = res.data?.code
-            // uni.clearStorageSync()
             if (code == 401) {
+              //token过期，刷新后重试原请求
               refreshAccess({ ...params, header })
                 .then(res11 => {
-                  //刷新token
                   resolve(res11)
                 })
                 .catch(err => {
                   reject(err)
                 })
-            } else if (code == 404) {
-              uni.showToast({
-                title: i18n.global.t('request.requestAddressNotFound'),
-                icon: 'none',
-                duration: 2000,
-              })
-              reject(res.data)
             } else {
-              uni.showToast({
-                title: res.data.msg,
-                icon: 'none',
-                duration: 2000,
-              })
-              reject(res.data)
+              handleBizError(res, reject)
             }
           }
         } else {
-          // uni.clearStorageSync()
           switch (res.statusCode) {
             case 401:
+              //token过期，刷新后重试原请求
               refreshAccess({ ...params, header })
                 .then(res11 => {
-                  //刷新token
                   resolve(res11)
                 })
                 .catch(err => {
@@ -238,11 +231,7 @@ export default params => {
                 })
               break
             case 404:
-              uni.showToast({
-                title: i18n.global.t('request.requestAddressNotFound'),
-                icon: 'none',
-                duration: 2000,
-              })
+              toast(i18n.global.t('request.requestAddressNotFound'))
               reject(i18n.global.t('request.apiRequestError'))
               break
             case 403:
@@ -251,11 +240,7 @@ export default params => {
               })
               break
             default:
-              uni.showToast({
-                title: i18n.global.t('request.pleaseRetry'),
-                icon: 'none',
-                duration: 2000,
-              })
+              toast(i18n.global.t('request.pleaseRetry'))
               reject(res.data)
               break
           }

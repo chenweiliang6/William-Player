@@ -133,8 +133,8 @@ const confirm = data => {
 
 onLoad(options => {
   muluData.value = uni.getStorageSync('muluData') || {}
-  muluData.value?.tv ? '' : (muluData.value.tv = [])
-  muluData.value?.movie ? '' : (muluData.value.movie = [])
+  if (!muluData.value.tv) muluData.value.tv = []
+  if (!muluData.value.movie) muluData.value.movie = []
   routerParams.value = options
   listData.value = muluData.value[titleType.value]
   setTimeout(() => {
