@@ -65,6 +65,10 @@
             <file-source v-if="showType === 'fileSource'" @click-item="changeFileSource" :isEmby="route.query.isEmby === '1'"></file-source>
             <wil-form :options="state.options" v-model="state.formData" v-else ref="wil_form"></wil-form>
           </transition>
+          <div class="tianyi-captcha" v-if="showType === '天翼云盘' && state.formData.loginMethod === 'account' && state.captchaImage">
+            <img class="tianyi-captcha__img" :src="state.captchaImage" @click="refreshTianyiCaptcha" />
+            <span class="tianyi-captcha__refresh" @click="refreshTianyiCaptcha">{{ t('source.refreshCaptcha') }}</span>
+          </div>
         </div>
       </template>
       <template #footer>
@@ -79,7 +83,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, reactive, ref } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import wilForm from '@/components/mobile/wil-form/index.vue'
 import wilTooltip from '@/components/electron/wil-tooltip/index.vue'
 import wilModal from '@/components/mobile/wil-modal/index.vue'
@@ -88,6 +92,9 @@ import { validateWebdav, validateEmby } from '@/utils/validate'
 import { useRoute, useRouter } from 'vue-router'
 import { toParse, toStringfy } from '@/pages/mobile/mine/common'
 import { loginUser, get189Folder, getQuarkFolder, get189User, getQuarkUser } from '@/utils/common'
+import { initLoginParam, login189 } from '@/utils/cloud189/login.js'
+import { save189Password, extract189TokenFields } from '@/utils/cloud189/store.js'
+import { addOperLog } from '@/network/apis'
 import * as CONFIG from '@/utils/config'
 import wilTitle from '@/components/electron/wil-title/index.vue'
 import { useI18n } from 'vue-i18n'
@@ -114,6 +121,10 @@ const state = reactive({
   history: ['fileSource'],
   options: [],
   editObj: {},
+  // 天翼账密登录状态
+  needCaptcha: false,
+  captchaImage: '',
+  cloud189Loading: false,
 })
 const providerLabelMap = computed(() => ({
   WebDAV: 'WebDAV',
@@ -181,6 +192,49 @@ const createEmbyOptions = () => [
 
 const createTianyiOptions = () => [
   {
+    label: t('source.loginMethod'),
+    prop: 'loginMethod',
+    type: 'radio',
+    formItemProps: { placeholder: t('common.select'), type: 'text' },
+    rule: [{ required: true, message: t('source.pleaseSelectLoginMethod') }],
+    columns: [
+      { label: t('source.accountLogin'), value: 'account' },
+      { label: 'Cookie', value: 'cookie' },
+    ],
+  },
+]
+
+const createTianyiAccountOptions = () => {
+  const opts = [
+    {
+      label: t('source.username'),
+      prop: 'username',
+      type: 'input',
+      formItemProps: { placeholder: t('source.accountPlaceholder'), type: 'text' },
+      rule: [{ required: true, message: t('source.pleaseInputUsername') }],
+    },
+    {
+      label: t('source.password'),
+      prop: 'password',
+      type: 'input',
+      formItemProps: { placeholder: t('source.tianyiPasswordPlaceholder'), type: 'password' },
+      rule: [{ required: true, message: t('source.pleaseInputPassword') }],
+    },
+  ]
+  if (state.needCaptcha) {
+    opts.push({
+      label: t('source.captchaLabel'),
+      prop: 'captcha',
+      type: 'input',
+      formItemProps: { placeholder: t('source.captchaPlaceholder'), type: 'text' },
+      rule: [{ required: true, message: t('source.captchaPlaceholder') }],
+    })
+  }
+  return opts
+}
+
+const createTianyiCookieOptions = () => [
+  {
     label: 'Cookie',
     prop: 'cookie',
     type: 'textarea',
@@ -225,6 +279,13 @@ const changeFileSource = item => {
   showType.value = item.name
   state.history.push(item.name)
   state.options = getProviderOptions(item.name)
+  if (item.name === '天翼云盘') {
+    // 新增默认账密登录
+    state.formData.loginMethod = 'account'
+    state.needCaptcha = false
+    state.captchaImage = ''
+    state.options = createTianyiAccountOptions()
+  }
 }
 
 const back = () => {
@@ -283,36 +344,11 @@ const confirm = () => {
     })
   } else if (showType.value === '天翼云盘') {
     wil_form.value.confirmCommit().then(async valid => {
-      if (valid) {
-        let obj = getCookieObject(state.formData.cookie)
-        let cloud189 = sourceList.value.find(i => i.type === '天翼云盘')
-        try {
-          let res = await get189User(obj)
-          if (currentDialogMode === 'add') {
-            let isHaveData = !sourceList.value.every(item => {
-              return !item.list.length
-            })
-            let tyObj = { name: res.loginName, JSESSIONID: obj.JSESSIONID, COOKIE_LOGIN_USER: obj.COOKIE_LOGIN_USER }
-            if (!isHaveData) {
-              cloud189.list.push({ ...tyObj, active: true })
-              uni.setStorageSync('isreload', true)
-            } else {
-              cloud189.list.push(tyObj)
-            }
-          } else if (currentDialogMode === 'edit') {
-            let same = cloud189.list.find(i => i.name === state.editObj.name)
-            same.name = res.loginName
-            same.JSESSIONID = obj.JSESSIONID
-            same.COOKIE_LOGIN_USER = obj.COOKIE_LOGIN_USER
-            if (state.editObj.active) {
-              uni.setStorageSync('isreload', true)
-            }
-          }
-          uni.setStorageSync('sourceList', sourceList.value)
-          judgeShow()
-        } catch (error) {
-          uni.showToast({ title: t('source.invalidCookie'), icon: 'none' })
-        }
+      if (!valid) return
+      if (state.formData.loginMethod === 'account') {
+        await confirmTianyiAccount(currentDialogMode)
+      } else {
+        await confirmTianyiCookie(currentDialogMode)
       }
     })
   } else if (showType.value === '夸克网盘') {
@@ -351,6 +387,140 @@ const confirm = () => {
     })
   }
   cancel()
+}
+
+//天翼云盘 Cookie 登录（原逻辑抽取）
+const confirmTianyiCookie = async currentDialogMode => {
+  let obj = getCookieObject(state.formData.cookie)
+  let cloud189 = sourceList.value.find(i => i.type === '天翼云盘')
+  try {
+    let res = await get189User(obj)
+    if (currentDialogMode === 'add') {
+      let isHaveData = !sourceList.value.every(item => {
+        return !item.list.length
+      })
+      let tyObj = { name: res.loginName, JSESSIONID: obj.JSESSIONID, COOKIE_LOGIN_USER: obj.COOKIE_LOGIN_USER }
+      if (!isHaveData) {
+        cloud189.list.push({ ...tyObj, active: true })
+        uni.setStorageSync('isreload', true)
+      } else {
+        cloud189.list.push(tyObj)
+      }
+    } else if (currentDialogMode === 'edit') {
+      let same = cloud189.list.find(i => i.name === state.editObj.name)
+      same.name = res.loginName
+      same.JSESSIONID = obj.JSESSIONID
+      same.COOKIE_LOGIN_USER = obj.COOKIE_LOGIN_USER
+      if (state.editObj.active) {
+        uni.setStorageSync('isreload', true)
+      }
+    }
+    uni.setStorageSync('sourceList', sourceList.value)
+    judgeShow()
+  } catch (error) {
+    uni.showToast({ title: t('source.invalidCookie'), icon: 'none' })
+  }
+}
+
+//天翼云盘账密登录
+const confirmTianyiAccount = async currentDialogMode => {
+  if (state.cloud189Loading) return
+  const { username, password, captcha } = state.formData
+  state.cloud189Loading = true
+  try {
+    if (!state.needCaptcha && !state.captchaImage) {
+      // 首次：初始化登录参数，判断是否需要验证码
+      const param = await initLoginParam(username, password)
+      state.needCaptcha = !!param.needCaptcha
+      state.captchaImage = param.captchaImage || ''
+      if (!param.needCaptcha) {
+        await doTianyiAccountLogin(username, password, '', currentDialogMode)
+      } else {
+        state.options = createTianyiAccountOptions()
+      }
+    } else {
+      await doTianyiAccountLogin(username, password, captcha || '', currentDialogMode)
+    }
+  } catch (e) {
+    uni.showToast({ title: e.message || t('source.loginFailed'), icon: 'none' })
+  } finally {
+    state.cloud189Loading = false
+  }
+}
+
+const doTianyiAccountLogin = async (username, password, validateCode, currentDialogMode) => {
+  try {
+    const tokenInfo = await login189({ validateCode })
+    const cloud189 = sourceList.value.find(i => i.type === '天翼云盘')
+    if (currentDialogMode === 'add') {
+      const isHaveData = !sourceList.value.every(item => !item.list.length)
+      const tokenFields = extract189TokenFields(tokenInfo)
+      if (!isHaveData) {
+        cloud189.list.push({ name: tokenInfo.loginName, ...tokenFields, active: true })
+        uni.setStorageSync('isreload', true)
+      } else {
+        cloud189.list.push({ name: tokenInfo.loginName, ...tokenFields })
+      }
+      addOperLog({ title: '登录天翼云盘', businessType: 12, operatorType: 2, operUrl: '' })
+    } else if (currentDialogMode === 'edit') {
+      const same = cloud189.list.find(i => i.name === state.editObj.name)
+      delete same.JSESSIONID
+      delete same.COOKIE_LOGIN_USER
+      Object.assign(same, extract189TokenFields(tokenInfo), { name: tokenInfo.loginName })
+      if (state.editObj.active) {
+        uni.setStorageSync('isreload', true)
+      }
+    }
+    save189Password(tokenInfo.loginName, username, password)
+    uni.setStorageSync('sourceList', sourceList.value)
+    uni.showToast({ title: t('common.saveSuccess'), icon: 'none' })
+    judgeShow()
+    showDialog.value = false
+    cancel()
+  } catch (e) {
+    uni.showToast({ title: e.message || t('source.loginFailed'), icon: 'none' })
+    // 登录失败刷新登录参数（验证码场景）
+    if (state.needCaptcha) {
+      try {
+        const param = await initLoginParam(username, password)
+        state.captchaImage = param.captchaImage || ''
+        state.formData.captcha = ''
+      } catch (e2) { }
+    }
+  }
+}
+
+//天翼云盘：登录方式 radio 切换（wil-form 通过 update:modelValue 反馈）
+watch(
+  () => state.formData.loginMethod,
+  val => {
+    if (showType.value !== '天翼云盘') return
+    if (val === 'account') {
+      state.needCaptcha = false
+      state.captchaImage = ''
+      state.options = createTianyiAccountOptions()
+    } else if (val === 'cookie') {
+      state.options = createTianyiCookieOptions()
+    }
+  }
+)
+
+//刷新天翼验证码
+const refreshTianyiCaptcha = async () => {
+  const { username, password } = state.formData
+  if (!username || !password) {
+    uni.showToast({ title: t('source.pleaseInputUsernameAndPassword'), icon: 'none' })
+    return
+  }
+  try {
+    const param = await initLoginParam(username, password)
+    state.needCaptcha = !!param.needCaptcha
+    state.captchaImage = param.captchaImage || ''
+    state.formData.captcha = ''
+    state.options = createTianyiAccountOptions()
+  } catch (e) {
+    uni.showToast({ title: e.message || t('source.loginFailed'), icon: 'none' })
+  }
 }
 
 const getCookieObject = cookie => {
@@ -465,7 +635,8 @@ const editSource = (item, vitem) => {
     state.oldData = JSON.parse(JSON.stringify(state.formData))
   } else if (item.type === '天翼云盘') {
     state.options = createTianyiOptions()
-    state.formData.cookie = `JSESSIONID=${vitem.JSESSIONID};COOKIE_LOGIN_USER=${vitem.COOKIE_LOGIN_USER}`
+    // 按现有凭证类型决定默认登录方式（token 条目默认账密，Cookie 条目默认 Cookie）
+    state.formData.loginMethod = vitem.sessionKey ? 'account' : 'cookie'
   } else if (item.type === '夸克网盘') {
     state.options = createQuarkOptions()
     state.formData.cookie = vitem.Cookie
@@ -830,6 +1001,25 @@ page {
 
   :deep(.wil-modal) {
     width: 600rpx;
+  }
+
+  .tianyi-captcha {
+    display: flex;
+    align-items: center;
+    padding: 8rpx 30rpx 16rpx 30rpx;
+
+    &__img {
+      width: 200rpx;
+      height: 80rpx;
+      cursor: pointer;
+    }
+
+    &__refresh {
+      margin-left: 24rpx;
+      color: #ff6701;
+      font-size: 26rpx;
+      cursor: pointer;
+    }
   }
 }
 </style>

@@ -20,6 +20,18 @@
                         :showButton="true" :buttonText="t('common.submit')" type="steps" v-if="activeTab === 'Emby'" ref="emby_form"
                         @confirm="confirmSubmit" @triggerBoundary="triggerBoundary">
                     </tv-form>
+                    <tv-form labelPosition="top" :options="cloud189FormOptions" v-model="state.cloud189FormData"
+                        :showButton="true" :buttonText="t('source.accountLogin')" type="steps" v-if="activeTab === '天翼云盘'" ref="cloud189_form"
+                        @confirm="confirmSubmit" @triggerBoundary="triggerBoundary">
+                        <template #captchaImage>
+                            <div class="captcha-image">
+                                <image v-if="state.captchaImage" class="captcha-image__img" :src="state.captchaImage"
+                                    mode="aspectFit" @click="refreshCaptcha"></image>
+                                <div v-else class="captcha-image__tip">{{ state.needCaptcha ?
+                                    t('source.captchaLoading') : t('source.captchaNotRequired') }}</div>
+                            </div>
+                        </template>
+                    </tv-form>
                 </div>
             </div>
         </div>
@@ -35,11 +47,14 @@ import tvPage from "@/components/tv/tv-page/index.vue";
 import tvForm from '@/components/tv/tv-form/index.vue'
 import { validateWebdav, validateEmby } from "@/utils/validate";
 import { onLoad } from "@dcloudio/uni-app";
+import { initLoginParam, login189 } from "@/utils/cloud189/login.js";
+import { persist189Token, save189Password } from "@/utils/cloud189/store.js";
 
 const { t } = useI18n()
 const wilQrcodeRef = ref(null);
 const webdav_form = ref(null)
 const emby_form = ref(null)
+const cloud189_form = ref(null)
 
 const routerParams = ref({})
 
@@ -65,7 +80,12 @@ const state = reactive({
     webdavOldData:{},
     //emby的表单配置
     embyFormData: { protocol: 'http' },
-    embyOldData:{}
+    embyOldData:{},
+    //天翼云盘账密登录
+    cloud189FormData: {},
+    needCaptcha: false,
+    captchaImage: '',
+    cloud189Loading: false,
 })
 const protocolOptions = [
     { label: 'HTTP', value: 'http' },
@@ -102,6 +122,30 @@ const embyFormOptions = computed(() => [
     },
     { label: t('source.password'), prop: 'password', type: 'input', formItemProps: { placeholder: t('source.embyPasswordPlaceholder'), type: 'password' }, rule: [{ required: true, message: t('source.pleaseInputPassword') }] },
 ])
+
+const cloud189FormOptions = computed(() => {
+    const opts = [
+        {
+            label: t('source.username'), prop: 'username', type: 'input',
+            formItemProps: { placeholder: t('source.accountPlaceholder'), type: 'text' },
+            rule: [{ required: true, message: t('source.pleaseInputUsername') }],
+        },
+        {
+            label: t('source.password'), prop: 'password', type: 'input',
+            formItemProps: { placeholder: t('source.tianyiPasswordPlaceholder'), type: 'password' },
+            rule: [{ required: true, message: t('source.pleaseInputPassword') }],
+        },
+    ]
+    if (state.needCaptcha) {
+        opts.push({ label: t('source.captchaLabel'), prop: 'captchaImage' })
+        opts.push({
+            label: t('source.captchaLabel'), prop: 'captcha', type: 'input',
+            formItemProps: { placeholder: t('source.captchaPlaceholder'), type: 'text' },
+            rule: [{ required: true, message: t('source.captchaPlaceholder') }],
+        })
+    }
+    return opts
+})
 
 
 // #ifdef APP-PLUS
@@ -158,9 +202,7 @@ const changeTab = (item, index) => {
     if (item.value === activeTab.value) return
     activeTab.value = item.value
     tabIndex.value = index
-    if (activeTab.value === '天翼云盘') {
-        open189Webview()
-    } else if (activeTab.value === '夸克网盘') {
+    if (activeTab.value === '夸克网盘') {
         openQuarkWebview()
     } else {
     }
@@ -168,11 +210,13 @@ const changeTab = (item, index) => {
 
 const keyCodeClick = (keyCode) => {
     if (focusModel.value === 'tabs') { //在上面tabs中切换的时候
-        if (keyCode === "KeyDown") { //往下就是到下面的输入form，如果是天翼和夸克，就不能往下
-            if (activeTab.value === 'WebDAV' || activeTab.value === 'Emby') {
+        if (keyCode === "KeyDown") { //往下就是到下面的输入form，夸克跳webview不能往下
+            if (activeTab.value === 'WebDAV' || activeTab.value === 'Emby' || activeTab.value === '天翼云盘') {
                 focusModel.value = 'form'
                 tabIndex.value = tabsList.value.findIndex(v => v.value === activeTab.value)
-                activeTab.value === 'WebDAV' ? webdav_form.value.evtMove(keyCode) : emby_form.value.evtMove(keyCode)
+                activeTab.value === 'WebDAV' ? webdav_form.value.evtMove(keyCode)
+                    : activeTab.value === 'Emby' ? emby_form.value.evtMove(keyCode)
+                        : cloud189_form.value.evtMove(keyCode)
             }
         } else if (keyCode === "KeyLeft") {
             if (tabIndex.value > 0) {
@@ -192,6 +236,8 @@ const keyCodeClick = (keyCode) => {
             webdav_form.value.evtMove(keyCode)
         } else if (activeTab.value === 'Emby') {
             emby_form.value.evtMove(keyCode)
+        } else if (activeTab.value === '天翼云盘') {
+            cloud189_form.value.evtMove(keyCode)
         }
     }
 };
@@ -210,6 +256,74 @@ const confirmSubmit = () => {
                 validateEmby(!routerParams.value.type, state.embyFormData,state.embyOldData, {})
             }
         })
+    } else if (activeTab.value === '天翼云盘') {
+        cloud189_form.value.submitForm(valid => {
+            if (valid) {
+                submitCloud189()
+            }
+        })
+    }
+}
+
+//天翼云盘账密登录
+const submitCloud189 = async () => {
+    if (state.cloud189Loading) return
+    const { username, password, captcha } = state.cloud189FormData
+    state.cloud189Loading = true
+    try {
+        if (!state.needCaptcha && !state.captchaImage) {
+            // 首次提交：初始化登录参数
+            const param = await initLoginParam(username, password)
+            state.needCaptcha = !!param.needCaptcha
+            state.captchaImage = param.captchaImage || ''
+            if (!param.needCaptcha) {
+                await doCloud189Login('')
+            }
+        } else {
+            await doCloud189Login(captcha || '')
+        }
+    } catch (e) {
+        uni.showToast({ title: e.message || t('source.loginFailed'), icon: 'none' })
+    } finally {
+        state.cloud189Loading = false
+    }
+}
+
+const doCloud189Login = async validateCode => {
+    try {
+        const tokenInfo = await login189({ validateCode })
+        const { isNew } = persist189Token(tokenInfo, {})
+        save189Password(tokenInfo.loginName, state.cloud189FormData.username, state.cloud189FormData.password)
+        uni.showToast({ title: isNew ? t('source.addAccountSuccess') : t('source.modifyAccountSuccess'), icon: 'none' })
+        uni.setStorageSync('isreload', true)
+        setTimeout(() => {
+            uni.switchTab({ url: '/pages/mobile/video/index' })
+        }, 1500)
+    } catch (e) {
+        uni.showToast({ title: e.message || t('source.loginFailed'), icon: 'none' })
+        // 登录失败刷新登录参数（验证码场景）
+        if (state.needCaptcha) {
+            try {
+                const param = await initLoginParam(state.cloud189FormData.username, state.cloud189FormData.password)
+                state.captchaImage = param.captchaImage || ''
+                state.cloud189FormData.captcha = ''
+            } catch (e2) { }
+        }
+    }
+}
+
+//刷新验证码
+const refreshCaptcha = async () => {
+    if (!state.cloud189FormData.username || !state.cloud189FormData.password) {
+        uni.showToast({ title: t('source.pleaseInputUsernameAndPassword'), icon: 'none' })
+        return
+    }
+    try {
+        const param = await initLoginParam(state.cloud189FormData.username, state.cloud189FormData.password)
+        state.needCaptcha = !!param.needCaptcha
+        state.captchaImage = param.captchaImage || ''
+    } catch (e) {
+        uni.showToast({ title: e.message || t('source.loginFailed'), icon: 'none' })
     }
 }
 
@@ -218,13 +332,6 @@ const triggerBoundary = (direction) => {
     if (direction === 'up') {
         focusModel.value = 'tabs'
     }
-}
-
-//打开天翼云盘的webview
-const open189Webview = () => {
-    uni.navigateTo({
-        url:`/pages/mobile/backend/cloud189-webview?platform=TV&url=${encodeURIComponent('https://cloud.189.cn')}`
-    })
 }
 
 //打开夸克网盘的webview
@@ -314,6 +421,21 @@ page {
             overflow: hidden;
             padding: 0 150rpx 50rpx 150rpx;
             margin-top: 40rpx;
+
+            .captcha-image {
+                display: flex;
+                align-items: center;
+
+                &__img {
+                    width: 240rpx;
+                    height: 90rpx;
+                }
+
+                &__tip {
+                    color: #a0c3f6;
+                    font-size: 26rpx;
+                }
+            }
         }
     }
 }

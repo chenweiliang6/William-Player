@@ -57,11 +57,8 @@ const sourceList = computed(() => [
       {
         name: t('navbar.tianyiCloudDrive'),
         img: 'https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/8c/87/69/8c8769f2-6bfa-19b2-53a4-9e10a555deb3/AppIcon-0-0-1x_U007emarketing-0-7-0-0-sRGB-85-220.png/350x350.png',
-        path: '/pages/mobile/backend/cloud189-webview',
-        query: {
-          url: 'https://cloud.189.cn',
-          title: t('navbar.tianyiCloudDrive'),
-        },
+        path: '/pages/mobile/source/add-cloud189',
+        query: { title: t('navbar.tianyiCloudDrive') },
       },
       {
         name: t('navbar.quarkCloudDrive'),

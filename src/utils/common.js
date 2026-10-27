@@ -183,7 +183,10 @@ const loginUser = webdavInfo => {
 }
 
 //天翼云盘
-const get189Folder = (data, cookieInfo) => {
+//凭证分流：条目含 sessionKey（189pc 账密登录）走新签名数据层，否则走旧 Cookie 体系
+import { list189Files, get189DownloadUrlNew, get189UserInfo } from '@/utils/cloud189/data.js'
+
+const legacyGet189Folder = (data, cookieInfo) => {
   return httpRequest(`${CONFIG.Folder189Url}&folderId=${data.folderId}&pageNum=${data.pageNum || 1}&pageSize=${data.pageSize || 1000}`, {
     method: 'GET',
     header: build189Header(build189Cookie(cookieInfo), { signType: true }),
@@ -191,8 +194,7 @@ const get189Folder = (data, cookieInfo) => {
   })
 }
 
-//天翼云盘获取视频链接
-const get189VideoUrl = (data, cookieInfo) => {
+const legacyGet189VideoUrl = (data, cookieInfo) => {
   const randomDigits = generateRandomDigits()
   return httpRequest(`${CONFIG.Video189Url}?noCache=0.${randomDigits}&fileId=${data.folderFileId}&type=2`, {
     method: 'GET',
@@ -201,8 +203,7 @@ const get189VideoUrl = (data, cookieInfo) => {
   })
 }
 
-//天翼云盘获取用户信息
-const get189User = obj => {
+const legacyGet189User = obj => {
   const randomDigits = generateRandomDigits()
   return httpRequest(`${CONFIG.User189Url}?noCache=0.${randomDigits}`, {
     method: 'GET',
@@ -211,8 +212,7 @@ const get189User = obj => {
   })
 }
 
-//天翼云盘获取文件下载链接
-const get189DownloadUrl = (data, cookieInfo) => {
+const legacyGet189DownloadUrl = (data, cookieInfo) => {
   const randomDigits = generateRandomDigits()
   return httpRequest(`${CONFIG.Download189Url}?noCache=0.${randomDigits}&fileId=${data.folderFileId}`, {
     method: 'GET',
@@ -220,6 +220,21 @@ const get189DownloadUrl = (data, cookieInfo) => {
     timeout: 5000,
   })
 }
+
+const get189Folder = (data, credential) =>
+  credential.sessionKey ? list189Files(data, credential) : legacyGet189Folder(data, credential)
+
+//天翼云盘获取视频链接
+const get189VideoUrl = (data, credential) =>
+  credential.sessionKey ? get189DownloadUrlNew(data, credential) : legacyGet189VideoUrl(data, credential)
+
+//天翼云盘获取用户信息
+const get189User = credential =>
+  credential.sessionKey ? get189UserInfo(credential) : legacyGet189User(credential)
+
+//天翼云盘获取文件下载链接
+const get189DownloadUrl = (data, credential) =>
+  credential.sessionKey ? get189DownloadUrlNew(data, credential) : legacyGet189DownloadUrl(data, credential)
 
 //夸克网盘
 const getQuarkFolder = (data, cookieInfo) => {

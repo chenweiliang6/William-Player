@@ -81,11 +81,8 @@ const getMapping = () => ({
     query: { title: t('navbar.modifyWebdav') },
   },
   "天翼云盘": {
-    path: "/pages/mobile/backend/cloud189-webview",
-    query: {
-      url: "https://cloud.189.cn",
-      title: t('navbar.tianyiCloudDrive'),
-    },
+    path: "/pages/mobile/source/add-cloud189",
+    query: { title: t('navbar.tianyiCloudDrive') },
   },
   "夸克网盘": {
     path: "/pages/mobile/backend/quark-webview",

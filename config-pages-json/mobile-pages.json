@@ -107,6 +107,12 @@
       }
     },
     {
+      "path": "pages/mobile/source/add-cloud189",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
       "path": "pages/mobile/video/index",
       "style": {
         "navigationStyle": "custom"
