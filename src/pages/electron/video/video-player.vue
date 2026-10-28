@@ -8,7 +8,7 @@
 import { onBeforeMount, reactive, ref } from 'vue'
 import mpvPlayer from './components/mpv-player.vue'
 import { useRoute } from 'vue-router'
-import { getWebDAVUrl, get189VideoUrl, loginUser, getQuarkResolutionUrl, getQuarkVideoUrl, getFolder, getTvSeason, get189Folder, getQuarkFolder } from '@/utils/common'
+import { getWebDAVUrl, get189VideoUrl, loginUser, getQuarkResolutionUrl, getQuarkVideoUrl, getWopanVideoUrl, getFolder, getTvSeason, get189Folder, getQuarkFolder } from '@/utils/common'
 import { calTime, handleSeasonName, generateChineseNumberMapping } from '@/utils/scrape'
 import { addOperLog } from '@/network/apis'
 import { IMG_DOMAIN } from '@/utils/config'
@@ -85,6 +85,16 @@ const getVideoUrl = async () => {
       // let res = await getQuarkVideoUrl({ folderFileId: route.query.folderFileId }, selectMedia);
       return res
     }
+  } else if (selectType.type == '联通云盘') {
+    if (selectMedia.name) {
+      let res = await getWopanVideoUrl(
+        {
+          folderFileId: route.query.folderFileId,
+        },
+        selectMedia
+      )
+      return res
+    }
   } else if (selectType.type == 'Emby') {
     if (selectMedia.name) {
       let res = await getEmbyPlayerUrl(
@@ -126,6 +136,8 @@ const setUrl = async () => {
     //     resolve(res.data)
     //   },
     // })
+  } else if (selectType.type == '联通云盘') {
+    config.url = res.url
   } else if (selectType.type == '夸克网盘') {
     if (res.data.video_list[0].video_info?.url) {
       config.url = res.data.video_list[0].video_info.url
@@ -145,6 +157,14 @@ const setUrl = async () => {
       })
       setQuarkUrl(res, num)
     }
+  } else if (selectType.type == 'Emby') {
+    config.url = selectMedia.protocol + '://' + selectMedia.address + ':' + selectMedia.port + res.MediaSources[0].DirectStreamUrl
+    addOperLog({
+      title: config.title.slice(0, 30),
+      businessType: 10,
+      operatorType: 2,
+      operUrl: config.url,
+    })
   }
 }
 

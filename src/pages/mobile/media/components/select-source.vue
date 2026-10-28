@@ -32,7 +32,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { loginUser, get189Folder, getQuarkFolder } from "@/utils/common";
+import { loginUser, get189Folder, getQuarkFolder, getWopanFolder } from "@/utils/common";
 import { useThemeColors } from '@/hooks/useThemeColors'
 import { useThemeClass } from '@/hooks/useThemeClass'
 
@@ -105,6 +105,19 @@ const handleSelect = async (item, vitem) => {
                 uni.hideLoading();
                 uni.showToast({
                     title: t('source.reloginQuarkCloudDrive'),
+                        icon: "none",
+                });
+            });
+    } else if (item.type == "联通云盘") {
+        await getWopanFolder({ folderId: "0" }, vitem)
+            .then((res) => {
+                uni.hideLoading();
+                emits('openFolder', item, vitem, res)
+            })
+            .catch((error) => {
+                uni.hideLoading();
+                uni.showToast({
+                    title: t('source.reloginUnicomCloudDrive'),
                     icon: "none",
                 });
             });

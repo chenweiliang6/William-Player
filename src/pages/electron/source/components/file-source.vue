@@ -65,6 +65,11 @@ const sourceList = computed(() => [
         label: t('source.quarkCloudDriveLabel'),
         img: 'https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/60/6f/e5/606fe5ab-3bfb-c5e4-5bed-08c9b2b5188f/AppIcon-0-0-1x_U007emarketing-0-7-0-0-85-220.png/350x350.png?',
       },
+      {
+        name: '联通云盘',
+        label: t('source.unicomCloudDriveLabel'),
+        img: 'https://is1-ssl.mzstatic.com/image/thumb/Purple126/v4/a1/63/38/a16338a7-ba51-498a-5180-7327b46ca2b7/AppIcon-0-0-1x_U007emarketing-0-0-0-0-85-220.png/350x350.png',
+      },
     ],
   },
 ])

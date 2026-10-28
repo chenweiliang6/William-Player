@@ -88,7 +88,7 @@ const playFile = src => {
 //判断选择的是哪个emby
 const judgeSelect = () => {
   let sourceList = uni.getStorageSync('sourceList') || []
-  const embySource = sourceList.find(item => (route.query.isEmby === '1') === (item.type === 'Emby'))
+  const embySource = sourceList.find(item => (route.query.isEmby === 'true') === (item.type === 'Emby'))
   if (!embySource?.list) {
     selectType = {}
     return

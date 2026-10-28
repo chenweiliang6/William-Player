@@ -91,8 +91,9 @@ import fileSource from './components/file-source.vue'
 import { validateWebdav, validateEmby } from '@/utils/validate'
 import { useRoute, useRouter } from 'vue-router'
 import { toParse, toStringfy } from '@/pages/mobile/mine/common'
-import { loginUser, get189Folder, getQuarkFolder, get189User, getQuarkUser } from '@/utils/common'
+import { loginUser, get189Folder, getQuarkFolder, get189User, getQuarkUser, getWopanFolder } from '@/utils/common'
 import { initLoginParam, login189 } from '@/utils/cloud189/login.js'
+import { wopanLogin } from '@/utils/wopan/login.js'
 import { save189Password, extract189TokenFields } from '@/utils/cloud189/store.js'
 import { addOperLog } from '@/network/apis'
 import * as CONFIG from '@/utils/config'
@@ -125,12 +126,15 @@ const state = reactive({
   needCaptcha: false,
   captchaImage: '',
   cloud189Loading: false,
+  needWopanSms: false,
+  wopanLoading: false,
 })
 const providerLabelMap = computed(() => ({
   WebDAV: 'WebDAV',
   Emby: 'Emby',
   天翼云盘: t('source.tianyiCloudDriveLabel'),
   夸克网盘: t('source.quarkCloudDriveLabel'),
+  联通云盘: t('source.unicomCloudDriveLabel'),
 }))
 const getSourceTypeLabel = type => providerLabelMap.value[type] || type
 const dialogTitle = computed(() => {
@@ -253,11 +257,42 @@ const createQuarkOptions = () => [
   },
 ]
 
+//联通云盘：手机号+密码，needSmsCode 后动态加短信验证码
+const createWopanOptions = () => {
+  const opts = [
+    {
+      label: t('source.wopanPhone'),
+      prop: 'phone',
+      type: 'input',
+      formItemProps: { placeholder: t('source.wopanPhonePlaceholder'), type: 'text' },
+      rule: [{ required: true, message: t('source.wopanPhonePlaceholder') }],
+    },
+    {
+      label: t('source.password'),
+      prop: 'password',
+      type: 'input',
+      formItemProps: { placeholder: t('source.wopanPasswordPlaceholder'), type: 'password' },
+      rule: [{ required: true, message: t('source.pleaseInputPassword') }],
+    },
+  ]
+  if (state.needWopanSms) {
+    opts.push({
+      label: t('source.wopanSmsCode'),
+      prop: 'smsCode',
+      type: 'input',
+      formItemProps: { placeholder: t('source.wopanSmsCodePlaceholder'), type: 'text' },
+      rule: [{ required: true, message: t('source.wopanSmsCodePlaceholder') }],
+    })
+  }
+  return opts
+}
+
 const getProviderOptions = provider => {
   if (provider === 'WebDAV') return createWebdavOptions()
   if (provider === 'Emby') return createEmbyOptions()
   if (provider === '天翼云盘') return createTianyiOptions()
   if (provider === '夸克网盘') return createQuarkOptions()
+  if (provider === '联通云盘') return createWopanOptions()
   return []
 }
 
@@ -285,6 +320,10 @@ const changeFileSource = item => {
     state.needCaptcha = false
     state.captchaImage = ''
     state.options = createTianyiAccountOptions()
+  }
+  if (item.name === '联通云盘') {
+    state.needWopanSms = false
+    state.options = createWopanOptions()
   }
 }
 
@@ -385,8 +424,58 @@ const confirm = () => {
         }
       }
     })
+  } else if (showType.value === '联通云盘') {
+    wil_form.value.confirmCommit().then(async valid => {
+      if (!valid) return
+      await confirmWopan(currentDialogMode)
+    })
+    return
   }
   cancel()
+}
+
+//联通云盘两步登录：手机号+密码 → 短信验证码 → token 落库
+const confirmWopan = async currentDialogMode => {
+  if (state.wopanLoading) return
+  const { phone, password, smsCode } = state.formData
+  state.wopanLoading = true
+  try {
+    const result = await wopanLogin(phone, password, state.needWopanSms ? smsCode : '')
+    if (result.needSmsCode) {
+      // 第一步完成，需要短信验证码
+      state.needWopanSms = true
+      state.options = createWopanOptions()
+      uni.showToast({ title: t('source.wopanSmsSent'), icon: 'none' })
+      return
+    }
+    const cloudWopan = sourceList.value.find(i => i.type === '联通云盘')
+    if (currentDialogMode === 'add') {
+      const isHaveData = !sourceList.value.every(item => !item.list.length)
+      const wopanObj = { name: phone, accessToken: result.accessToken, refreshToken: result.refreshToken }
+      if (!isHaveData) {
+        cloudWopan.list.push({ ...wopanObj, active: true })
+        uni.setStorageSync('isreload', true)
+      } else {
+        cloudWopan.list.push(wopanObj)
+      }
+      addOperLog({ title: '登录联通云盘', businessType: 12, operatorType: 2, operUrl: '' })
+    } else if (currentDialogMode === 'edit') {
+      const same = cloudWopan.list.find(i => i.name === state.editObj.name)
+      Object.assign(same, { name: phone, accessToken: result.accessToken, refreshToken: result.refreshToken })
+      if (state.editObj.active) {
+        uni.setStorageSync('isreload', true)
+      }
+    }
+    uni.setStorageSync('sourceList', sourceList.value)
+    uni.showToast({ title: t('common.saveSuccess'), icon: 'none' })
+    judgeShow()
+    showDialog.value = false
+    cancel()
+  } catch (e) {
+    uni.showToast({ title: e.message || t('source.loginFailed'), icon: 'none' })
+  } finally {
+    state.wopanLoading = false
+  }
 }
 
 //天翼云盘 Cookie 登录（原逻辑抽取）
@@ -611,6 +700,17 @@ const handleSelect = (item, vitem) => {
               icon: 'none',
             })
           })
+      } else if (item.type == '联通云盘') {
+        await getWopanFolder({ folderId: '0' }, vitem)
+          .then(() => {
+            resetSelect(vitem)
+          })
+          .catch(error => {
+            uni.showToast({
+              title: t('source.reloginUnicomCloudDrive'),
+              icon: 'none',
+            })
+          })
       } else if (item.type == 'Emby') {
         resetSelect(vitem)
       }
@@ -640,6 +740,10 @@ const editSource = (item, vitem) => {
   } else if (item.type === '夸克网盘') {
     state.options = createQuarkOptions()
     state.formData.cookie = vitem.Cookie
+  } else if (item.type === '联通云盘') {
+    state.needWopanSms = false
+    state.options = createWopanOptions()
+    state.formData.phone = vitem.name
   }
   showDialog.value = true
 }

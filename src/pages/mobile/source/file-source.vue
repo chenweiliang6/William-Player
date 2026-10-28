@@ -69,6 +69,12 @@ const sourceList = computed(() => [
           title: t('navbar.quarkCloudDrive'),
         },
       },
+      {
+        name: t('source.unicomCloudDrive'),
+        img: 'https://is1-ssl.mzstatic.com/image/thumb/Purple126/v4/a1/63/38/a16338a7-ba51-498a-5180-7327b46ca2b7/AppIcon-0-0-1x_U007emarketing-0-0-0-0-85-220.png/350x350.png',
+        path: '/pages/mobile/source/add-wopan',
+        query: { title: t('source.unicomCloudDrive') },
+      },
     ],
   },
 ])

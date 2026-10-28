@@ -32,6 +32,10 @@
                             </div>
                         </template>
                     </tv-form>
+                    <tv-form labelPosition="top" :options="wopanFormOptions" v-model="state.wopanFormData"
+                        :showButton="true" :buttonText="t('source.accountLogin')" type="steps" v-if="activeTab === '联通云盘'" ref="wopan_form"
+                        @confirm="confirmSubmit" @triggerBoundary="triggerBoundary">
+                    </tv-form>
                 </div>
             </div>
         </div>
@@ -49,12 +53,15 @@ import { validateWebdav, validateEmby } from "@/utils/validate";
 import { onLoad } from "@dcloudio/uni-app";
 import { initLoginParam, login189 } from "@/utils/cloud189/login.js";
 import { persist189Token, save189Password } from "@/utils/cloud189/store.js";
+import { wopanLogin } from "@/utils/wopan/login.js";
+import { persistWopanToken } from "@/utils/wopan/store.js";
 
 const { t } = useI18n()
 const wilQrcodeRef = ref(null);
 const webdav_form = ref(null)
 const emby_form = ref(null)
 const cloud189_form = ref(null)
+const wopan_form = ref(null)
 
 const routerParams = ref({})
 
@@ -69,7 +76,8 @@ const tabsList = computed(() => [
     { value: 'WebDAV', name: 'WebDAV', active: activeTab.value === 'WebDAV' },
     { value: 'Emby', name: 'Emby', active: activeTab.value === 'Emby' },
     { value: '天翼云盘', name: t('navbar.tianyiCloudDrive'), active: activeTab.value === '天翼云盘' },
-    { value: '夸克网盘', name: t('navbar.quarkCloudDrive'), active: activeTab.value === '夸克网盘' }
+    { value: '夸克网盘', name: t('navbar.quarkCloudDrive'), active: activeTab.value === '夸克网盘' },
+    { value: '联通云盘', name: t('source.unicomCloudDrive'), active: activeTab.value === '联通云盘' }
 ])
 
 const focusModel = ref('tabs')//当前键盘控制器在哪个组件上
@@ -86,6 +94,10 @@ const state = reactive({
     needCaptcha: false,
     captchaImage: '',
     cloud189Loading: false,
+    //联通云盘账密登录
+    wopanFormData: {},
+    needWopanSms: false,
+    wopanLoading: false,
 })
 const protocolOptions = [
     { label: 'HTTP', value: 'http' },
@@ -142,6 +154,30 @@ const cloud189FormOptions = computed(() => {
             label: t('source.captchaLabel'), prop: 'captcha', type: 'input',
             formItemProps: { placeholder: t('source.captchaPlaceholder'), type: 'text' },
             rule: [{ required: true, message: t('source.captchaPlaceholder') }],
+        })
+    }
+    return opts
+})
+
+//联通云盘表单：手机号+密码，needSmsCode 后动态加短信验证码
+const wopanFormOptions = computed(() => {
+    const opts = [
+        {
+            label: t('source.wopanPhone'), prop: 'phone', type: 'input',
+            formItemProps: { placeholder: t('source.wopanPhonePlaceholder'), type: 'text' },
+            rule: [{ required: true, message: t('source.wopanPhonePlaceholder') }],
+        },
+        {
+            label: t('source.password'), prop: 'password', type: 'input',
+            formItemProps: { placeholder: t('source.wopanPasswordPlaceholder'), type: 'password' },
+            rule: [{ required: true, message: t('source.pleaseInputPassword') }],
+        },
+    ]
+    if (state.needWopanSms) {
+        opts.push({
+            label: t('source.wopanSmsCode'), prop: 'smsCode', type: 'input',
+            formItemProps: { placeholder: t('source.wopanSmsCodePlaceholder'), type: 'text' },
+            rule: [{ required: true, message: t('source.wopanSmsCodePlaceholder') }],
         })
     }
     return opts
@@ -211,12 +247,13 @@ const changeTab = (item, index) => {
 const keyCodeClick = (keyCode) => {
     if (focusModel.value === 'tabs') { //在上面tabs中切换的时候
         if (keyCode === "KeyDown") { //往下就是到下面的输入form，夸克跳webview不能往下
-            if (activeTab.value === 'WebDAV' || activeTab.value === 'Emby' || activeTab.value === '天翼云盘') {
+            if (activeTab.value === 'WebDAV' || activeTab.value === 'Emby' || activeTab.value === '天翼云盘' || activeTab.value === '联通云盘') {
                 focusModel.value = 'form'
                 tabIndex.value = tabsList.value.findIndex(v => v.value === activeTab.value)
                 activeTab.value === 'WebDAV' ? webdav_form.value.evtMove(keyCode)
                     : activeTab.value === 'Emby' ? emby_form.value.evtMove(keyCode)
-                        : cloud189_form.value.evtMove(keyCode)
+                        : activeTab.value === '天翼云盘' ? cloud189_form.value.evtMove(keyCode)
+                            : wopan_form.value.evtMove(keyCode)
             }
         } else if (keyCode === "KeyLeft") {
             if (tabIndex.value > 0) {
@@ -238,6 +275,8 @@ const keyCodeClick = (keyCode) => {
             emby_form.value.evtMove(keyCode)
         } else if (activeTab.value === '天翼云盘') {
             cloud189_form.value.evtMove(keyCode)
+        } else if (activeTab.value === '联通云盘') {
+            wopan_form.value.evtMove(keyCode)
         }
     }
 };
@@ -260,6 +299,12 @@ const confirmSubmit = () => {
         cloud189_form.value.submitForm(valid => {
             if (valid) {
                 submitCloud189()
+            }
+        })
+    } else if (activeTab.value === '联通云盘') {
+        wopan_form.value.submitForm(valid => {
+            if (valid) {
+                submitWopan()
             }
         })
     }
@@ -309,6 +354,32 @@ const doCloud189Login = async validateCode => {
                 state.cloud189FormData.captcha = ''
             } catch (e2) { }
         }
+    }
+}
+
+//联通云盘两步登录：手机号+密码 → 短信验证码 → token 落库
+const submitWopan = async () => {
+    if (state.wopanLoading) return
+    const { phone, password, smsCode } = state.wopanFormData
+    state.wopanLoading = true
+    try {
+        const result = await wopanLogin(phone, password, state.needWopanSms ? smsCode : '')
+        if (result.needSmsCode) {
+            // 第一步完成，需要短信验证码
+            state.needWopanSms = true
+            uni.showToast({ title: t('source.wopanSmsSent'), icon: 'none' })
+            return
+        }
+        persistWopanToken({ phone, accessToken: result.accessToken, refreshToken: result.refreshToken }, {})
+        uni.showToast({ title: t('source.addAccountSuccess'), icon: 'none' })
+        uni.setStorageSync('isreload', true)
+        setTimeout(() => {
+            uni.switchTab({ url: '/pages/mobile/video/index' })
+        }, 1500)
+    } catch (e) {
+        uni.showToast({ title: e.message || t('source.loginFailed'), icon: 'none' })
+    } finally {
+        state.wopanLoading = false
     }
 }
 

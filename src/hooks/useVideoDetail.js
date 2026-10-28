@@ -1,5 +1,5 @@
 import { computed, onBeforeMount, ref, nextTick, watch } from 'vue'
-import { loginUser, getFolder, get189Folder, getQuarkFolder, getTvSeason, getMovieTvById } from '@/utils/common'
+import { loginUser, getFolder, get189Folder, getQuarkFolder, getWopanFolder, getTvSeason, getMovieTvById } from '@/utils/common'
 import { parseTime, calTime, handleSecond, handleSeasonName, extractSeasonNumber, generateChineseNumberMapping } from '@/utils/scrape'
 import { onShow, onLoad, onUnload } from '@dcloudio/uni-app'
 import editIcon from '@/static/edit_icon.png'
@@ -255,6 +255,12 @@ export function useVideoDetail({ route, router }) {
         prop: 'data.list',
         name: 'file_name',
       },
+      '联通云盘': {
+        apiFunction: getWopanFolder,
+        params: { folderId: activeSeason.value.folderFileId },
+        prop: 'fileListAO.fileList',
+        name: 'name',
+      },
     }
     try {
       result = await apiMapping[type].apiFunction(apiMapping[type].params, selectMedia.value)
@@ -300,6 +306,16 @@ export function useVideoDetail({ route, router }) {
           ji: i.ji,
           // path: "/我的视频/电视剧",
           provider: 'Quark',
+        }
+      })
+    } else if (type === '联通云盘') {
+      // wopan 下载链接需用 fid（GetDownloadUrlV2 参数）
+      tvList.value = tvList.value.map(i => {
+        return {
+          id: i.fid || i.id,
+          name: i.name,
+          ji: i.ji,
+          provider: 'WoPan',
         }
       })
     }

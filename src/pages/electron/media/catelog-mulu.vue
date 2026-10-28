@@ -118,7 +118,7 @@ import checkActive from '@/static/check-active.png'
 import deleteIcon from '@/static/delete-icon.png'
 import { useRoute, useRouter } from 'vue-router'
 import { useSelectFolder } from '@/hooks/useSelectFolder.js'
-import { loginUser, get189Folder, getQuarkFolder, getWebDAVUrl, get189DownloadUrl, getQuarkVideoUrl } from '@/utils/common.js'
+import { loginUser, get189Folder, getQuarkFolder, getWopanFolder, getWebDAVUrl, get189DownloadUrl, getQuarkVideoUrl } from '@/utils/common.js'
 import { useI18n } from 'vue-i18n'
 
 const route = useRoute()
@@ -141,6 +141,7 @@ const providerLabelMap = computed(() => ({
   Emby: 'Emby',
   天翼云盘: t('source.tianyiCloudDriveLabel'),
   夸克网盘: t('source.quarkCloudDriveLabel'),
+  联通云盘: t('source.unicomCloudDriveLabel'),
 }))
 const getSourceTypeLabel = type => providerLabelMap.value[type] || type
 
@@ -251,6 +252,20 @@ const handleSelect = async (item, vitem) => {
           icon: 'none',
         })
       })
+  } else if (item.type == '联通云盘') {
+    await getWopanFolder({ folderId: '0' }, vitem)
+      .then(res => {
+        uni.hideLoading()
+        result.value = res
+        requestParams.value = {}
+      })
+      .catch(error => {
+        uni.hideLoading()
+        uni.showToast({
+          title: t('source.reloginUnicomCloudDrive'),
+          icon: 'none',
+        })
+      })
   }
 }
 
@@ -278,6 +293,8 @@ const mapping = {
     'https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/8c/87/69/8c8769f2-6bfa-19b2-53a4-9e10a555deb3/AppIcon-0-0-1x_U007emarketing-0-7-0-0-sRGB-85-220.png/350x350.png',
   '夸克网盘':
     'https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/60/6f/e5/606fe5ab-3bfb-c5e4-5bed-08c9b2b5188f/AppIcon-0-0-1x_U007emarketing-0-7-0-0-85-220.png/350x350.png?',
+  '联通云盘':
+    'https://is1-ssl.mzstatic.com/image/thumb/Purple126/v4/a1/63/38/a16338a7-ba51-498a-5180-7327b46ca2b7/AppIcon-0-0-1x_U007emarketing-0-0-0-0-85-220.png/350x350.png',
 }
 
 const cancel = () => {

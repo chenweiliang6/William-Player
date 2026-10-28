@@ -90,10 +90,11 @@ export function useVideoAll({ wil_list, route = null }) {
 
   //设置emby图片
   const setEmbyImg = item => {
+    const apiKey = selectMedia.value.token ? `&api_key=${selectMedia.value.token}` : ''
     if (item.ImageTags.Primary) {
-      return `${selectMedia.value.protocol}://${selectMedia.value.address}:${selectMedia.value.port}/emby/Items/${item.Id}/Images/Primary?tag=${item.ImageTags.Primary}`
+      return `${selectMedia.value.protocol}://${selectMedia.value.address}:${selectMedia.value.port}/emby/Items/${item.Id}/Images/Primary?tag=${item.ImageTags.Primary}${apiKey}`
     } else if (item.PrimaryImageItemId) {
-      return `${selectMedia.value.protocol}://${selectMedia.value.address}:${selectMedia.value.port}/emby/Items/${item.PrimaryImageItemId}/Images/Primary?tag=${item.PrimaryImageTag}`
+      return `${selectMedia.value.protocol}://${selectMedia.value.address}:${selectMedia.value.port}/emby/Items/${item.PrimaryImageItemId}/Images/Primary?tag=${item.PrimaryImageTag}${apiKey}`
     } else {
       return posterEmpty
     }

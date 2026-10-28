@@ -1,6 +1,6 @@
 import { ref, onBeforeMount } from 'vue'
 import { setTmdbKey, getUntokenDicts, addOperLog } from '@/network/apis'
-import { loginUser, getFolder, getTvSeason, get189Folder, getQuarkFolder, getCutContent } from '@/utils/common'
+import { loginUser, getFolder, getTvSeason, get189Folder, getQuarkFolder, getWopanFolder, getCutContent } from '@/utils/common'
 import { handleSeasonName, handleNameYear, recursionMovie, recursionTv, extractSeasonNumber, generateChineseNumberMapping } from '@/utils/scrape'
 import { toStringfy } from '@/pages/mobile/mine/common'
 import { onShow, onUnload } from '@dcloudio/uni-app'
@@ -459,6 +459,76 @@ export function useVideoIndex({ wil_modal }) {
       logTitle: t('video.quarkPosterWallGenerated'),
     })
 
+  //联通云盘refresh
+  const refreshWopanVideo = () =>
+    refreshPosterWall({
+      scan: getWopanMovieTv,
+      logTitle: t('video.wopanPosterWallGenerated'),
+    })
+
+  //根据设定好的文件路径查找联通云盘的文件（结构对齐 get189MovieTv）
+  const getWopanMovieTv = async () => {
+    let muluData = uni.getStorageSync('muluData') || {}
+    let movieMulu = muluData.movie?.filter(v => v.name == selectMedia.value.name)
+    let tvMulu = muluData.tv?.filter(v => v.name == selectMedia.value.name)
+    if (!movieMulu?.length && !tvMulu?.length) {
+      uni.showToast({
+        title: t('media.pleaseSetMovieTvDirectory'),
+        icon: 'none',
+      })
+      return
+    }
+    scrollTop.value = 0
+    refreshLoading.value = true
+
+    if (movieMulu?.length) {
+      await Promise.allSettled(
+        movieMulu.map(async h => {
+          let movieResult = await getWopanFolder({ folderId: h.folderFileId }, selectMedia.value)
+          let movieArr = movieResult.fileListAO.fileList.filter(v => {
+            v.path = h.path + '/' + v.name
+            v.provider = 'WoPan'
+            return VIDEO_FORMAT.some(i => v.name.includes(i))
+          })
+          refreshData.value.found += movieArr.length
+          movieTvData.value.movie.push(...movieArr)
+          await Promise.allSettled(
+            movieResult.fileListAO.folderList.map(async v => {
+              v.path = h.path + '/' + v.name
+              v.provider = 'WoPan'
+              await recursionMovie(v, movieTvData.value.movie, selectType.value, selectMedia.value, refreshData.value)
+            })
+          )
+        })
+      )
+    } else {
+      uni.showToast({
+        title: t('source.pleaseSetMovieDirectory'),
+        icon: 'none',
+      })
+    }
+    if (tvMulu?.length) {
+      await Promise.allSettled(
+        tvMulu.map(async h => {
+          let tvResult = await getWopanFolder({ folderId: h.folderFileId }, selectMedia.value)
+          if (!tvResult.fileListAO.folderList) tvResult.fileListAO.folderList = []
+          await Promise.allSettled(
+            tvResult.fileListAO.folderList.map(async v => {
+              v.path = h.path + '/' + v.name
+              v.provider = 'WoPan'
+              await recursionTv(v, {}, movieTvData.value.tv, selectType.value, selectMedia.value, refreshData.value)
+            })
+          )
+        })
+      )
+    } else {
+      uni.showToast({
+        title: t('source.pleaseSetTvDirectory'),
+        icon: 'none',
+      })
+    }
+  }
+
   //查找天翼云盘中的名叫电影,电视剧的文件夹，按照此路径简单查询/我的视频/电影，/我的视频/电视剧，避免扫库有风险
   const getQuarkMovieTv = async () => {
     let muluData = uni.getStorageSync('muluData') || {}
@@ -533,12 +603,13 @@ export function useVideoIndex({ wil_modal }) {
     scrollTop.value = 0
     refreshLoading.value = true
     let res1 = await getMainView(selectMedia.value)
+    const imgApiKey = selectMedia.value.token ? `&api_key=${selectMedia.value.token}` : ''
     embyMovieTvList.value = res1.Items.map(v => {
       return {
         name: v.Name,
         collectionType: v.CollectionType,
         poster: v?.ImageTags?.Primary
-          ? `${selectMedia.value.protocol}://${selectMedia.value.address}:${selectMedia.value.port}/emby/Items/${v.Id}/Images/Primary?tag=${v.ImageTags.Primary}`
+          ? `${selectMedia.value.protocol}://${selectMedia.value.address}:${selectMedia.value.port}/emby/Items/${v.Id}/Images/Primary?tag=${v.ImageTags.Primary}${imgApiKey}`
           : emptyBg,
         id: v.Id,
         list: [],
@@ -564,7 +635,7 @@ export function useVideoIndex({ wil_modal }) {
               provider: 'Emby',
               releaseTime: dayjs(i.EndDate).format('YYYY-MM-DD'),
               poster: i.ImageTags.Primary
-                ? `${selectMedia.value.protocol}://${selectMedia.value.address}:${selectMedia.value.port}/emby/Items/${i.Id}/Images/Primary?tag=${i.ImageTags.Primary}`
+                ? `${selectMedia.value.protocol}://${selectMedia.value.address}:${selectMedia.value.port}/emby/Items/${i.Id}/Images/Primary?tag=${i.ImageTags.Primary}${imgApiKey}`
                 : emptyBg,
               type: i.Type,
             }
@@ -586,6 +657,8 @@ export function useVideoIndex({ wil_modal }) {
       await refresh189Video()
     } else if (selectType.value.type == '夸克网盘') {
       await refreshQuarkVideo()
+    } else if (selectType.value.type == '联通云盘') {
+      await refreshWopanVideo()
     } else if (selectType.value.type == 'Emby') {
       await refreshEmby()
     }
@@ -595,6 +668,12 @@ export function useVideoIndex({ wil_modal }) {
   //同步当前源的历史记录：只保留本地影视库中仍存在的记录，并回写storage
   const syncHistoryPlay = () => {
     historyPlay.value = historyStore.readBySource(selectType.value.type, selectMedia.value.name)
+    //Emby 源没有本地刮削库 localMovieTvData，历史记录直接保留
+    if (selectType.value.type == 'Emby') {
+      const embyOthers = historyStore.read().filter(v => v.sourceType != selectType.value.type || v.sourceName != selectMedia.value.name)
+      historyStore.write([...embyOthers, ...historyPlay.value])
+      return
+    }
     //从历史播放记录中筛选出当前影视中存在的
     historyPlay.value = historyPlay.value.filter(item => {
       return (
@@ -633,6 +712,11 @@ export function useVideoIndex({ wil_modal }) {
           type: '夸克网盘',
           list: [],
           img: 'https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/60/6f/e5/606fe5ab-3bfb-c5e4-5bed-08c9b2b5188f/AppIcon-0-0-1x_U007emarketing-0-7-0-0-85-220.png/350x350.png?',
+        },
+        {
+          type: '联通云盘',
+          list: [],
+          img: 'https://is1-ssl.mzstatic.com/image/thumb/Purple126/v4/a1/63/38/a16338a7-ba51-498a-5180-7327b46ca2b7/AppIcon-0-0-1x_U007emarketing-0-0-0-0-85-220.png/350x350.png',
         },
       ]
       uni.setStorageSync('sourceList', sourceList.value)
@@ -698,6 +782,15 @@ export function useVideoIndex({ wil_modal }) {
           video_navbar.value.showProgress()
         }
       }
+    } else if (selectType.value.type == '联通云盘') {
+      let isreload = uni.getStorageSync('isreload')
+      if (isreload || prevPage == 'pages/mobile/backend/data-sync') {
+        scrollTop.value = 0
+        uni.removeStorageSync('isreload')
+        if (uni.getStorageSync('settingData').tmdbKey) {
+          video_navbar.value.showProgress()
+        }
+      }
     } else if (selectType.value.type == 'Emby') {
       let isreload = uni.getStorageSync('isreload')
       if (isreload || prevPage == 'pages/mobile/backend/data-sync') {
@@ -754,6 +847,11 @@ export function useVideoIndex({ wil_modal }) {
       if (selectMedia.value.name) {
         // let res = await getQuarkFolder({ fid: "0" }, selectMedia.value);
         // listData.value = [res.data];
+      }
+    } else if (selectType.value.type == '联通云盘') {
+      if (selectMedia.value.name) {
+        // let res = await getWopanFolder({ folderId: "0" }, selectMedia.value);
+        // listData.value = [res.fileListAO];
       }
     }
   })

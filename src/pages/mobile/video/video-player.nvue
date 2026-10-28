@@ -67,7 +67,7 @@ import playerDetail from './components/player-component/detail.nvue'
 import tvSelect from './components/player-component/tv-select.nvue'
 import tvButton from './components/player-component/tv-button.nvue'
 import { addOperLog } from '@/network/apis'
-import { getWebDAVUrl, get189VideoUrl, loginUser, getQuarkResolutionUrl, getQuarkVideoUrl, getFolder, getTvSeason, get189Folder, getQuarkFolder } from '@/utils/common'
+import { getWebDAVUrl, get189VideoUrl, loginUser, getQuarkResolutionUrl, getQuarkVideoUrl, getWopanVideoUrl, getFolder, getTvSeason, get189Folder, getQuarkFolder } from '@/utils/common'
 import { sortVideoList, filterVideoFormat } from '@/utils/player-common'
 import { calTime, handleSeasonName, generateChineseNumberMapping } from '@/utils/scrape'
 import { getEmbyPlayerUrl } from '@/utils/emby'
@@ -186,6 +186,16 @@ export default {
           //   this.selectMedia
           // )
           let res = await getQuarkVideoUrl({ folderFileId: this.routerParams.folderFileId }, this.selectMedia)
+          return res
+        }
+      } else if (this.selectType.type == '联通云盘') {
+        if (this.selectMedia.name) {
+          let res = await getWopanVideoUrl(
+            {
+              folderFileId: this.routerParams.folderFileId,
+            },
+            this.selectMedia
+          )
           return res
         }
       } else if (this.selectType.type == 'Emby') {
@@ -334,6 +344,12 @@ export default {
           })
           this.setQuarkUrl(res, num)
         }
+      } else if (this.selectType.type == '联通云盘') {
+        addOperLog({ title: this.config.title.slice(0, 30), businessType: 10, operatorType: 2, operUrl: res.url })
+        this.config.url = res.url
+      } else if (this.selectType.type == 'Emby') {
+        this.config.url = this.selectMedia.protocol + '://' + this.selectMedia.address + ':' + this.selectMedia.port + res.MediaSources[0].DirectStreamUrl
+        addOperLog({ title: this.config.title.slice(0, 30), businessType: 10, operatorType: 2, operUrl: this.config.url })
       }
     },
     getPipStatus(event) {

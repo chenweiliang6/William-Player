@@ -42,7 +42,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { loginUser, get189Folder, getQuarkFolder } from '@/utils/common'
+import { loginUser, get189Folder, getQuarkFolder, getWopanFolder } from '@/utils/common'
 import { onShow } from '@dcloudio/uni-app'
 
 const props = defineProps({
@@ -251,6 +251,17 @@ const selectSource = (item, vitem) => {
           .catch(error => {
             uni.showToast({
               title: t('source.reloginQuarkCloudDrive'),
+              icon: 'none',
+            })
+          })
+      } else if (item.type == '联通云盘') {
+        await getWopanFolder({ folderId: '0' }, vitem)
+          .then(() => {
+            resetSelect(vitem)
+          })
+          .catch(error => {
+            uni.showToast({
+              title: t('source.reloginUnicomCloudDrive'),
               icon: 'none',
             })
           })

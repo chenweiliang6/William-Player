@@ -274,6 +274,15 @@ const getQuarkUser = obj => {
   })
 }
 
+//联通云盘
+import { listWopanFiles, getWopanDownloadUrl, getWopanUser } from '@/utils/wopan/data.js'
+
+//联通云盘获取文件列表（fileListAO 结构对齐天翼云盘，上层零改动）
+const getWopanFolder = (data, credential) => listWopanFiles(data.folderId, credential)
+
+//联通云盘获取视频播放/下载链接
+const getWopanVideoUrl = (data, credential) => getWopanDownloadUrl(data.folderFileId, credential)
+
 //获取第几季的详情
 const getTvSeason = data => getTvSeasonDetail(data)
 //通过tmdb接口获取更详细的信息
@@ -389,6 +398,9 @@ export {
   getQuarkVideoUrl,
   getQuarkResolutionUrl,
   getQuarkUser,
+  getWopanFolder,
+  getWopanVideoUrl,
+  getWopanUser,
   getTvSeason,
   getMovieTvById,
   getCutContent,

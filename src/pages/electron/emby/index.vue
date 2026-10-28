@@ -38,6 +38,7 @@ import type { EmbyCollectionItem, ProcessedCollectionItem, EmbyQueryParams, Clas
 import { judgeSelect } from '@/utils/tools'
 import dayjs from 'dayjs'
 import { useI18n } from 'vue-i18n'
+import { onShow } from '@dcloudio/uni-app'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -117,12 +118,13 @@ const clickAll = (item: ClassifyItem) => {
 const refreshEmby = async (): Promise<void> => {
   const CollectionTypeArr = ['movies', 'tvshows', 'music', 'games', 'books', 'musicvideos', 'homevideos', 'livetv', 'channels']
   let res1 = await getMainView(selectMedia.value)
+  const imgApiKey = selectMedia.value.token ? `&api_key=${selectMedia.value.token}` : ''
   let embyMovieTvList = res1.Items.map((v: EmbyCollectionItem) => {
     return {
       name: v.Name,
       collectionType: v.CollectionType,
       poster: v?.ImageTags?.Primary
-        ? `${selectMedia.value.protocol}://${selectMedia.value.address}:${selectMedia.value.port}/emby/Items/${v.Id}/Images/Primary?tag=${v.ImageTags.Primary}`
+        ? `${selectMedia.value.protocol}://${selectMedia.value.address}:${selectMedia.value.port}/emby/Items/${v.Id}/Images/Primary?tag=${v.ImageTags.Primary}${imgApiKey}`
         : emptyBg,
       id: v.Id,
       list: [],
@@ -148,7 +150,7 @@ const refreshEmby = async (): Promise<void> => {
             provider: 'Emby',
             releaseTime: dayjs(i.EndDate).format('YYYY-MM-DD'),
             poster: i?.ImageTags?.Primary
-              ? `${selectMedia.value.protocol}://${selectMedia.value.address}:${selectMedia.value.port}/emby/Items/${i.Id}/Images/Primary?tag=${i.ImageTags.Primary}`
+              ? `${selectMedia.value.protocol}://${selectMedia.value.address}:${selectMedia.value.port}/emby/Items/${i.Id}/Images/Primary?tag=${i.ImageTags.Primary}${imgApiKey}`
               : emptyBg,
             type: i.Type,
           }
@@ -158,6 +160,11 @@ const refreshEmby = async (): Promise<void> => {
     })
   )
   uni.setStorageSync('embyMovieTvList', embyMovieTvList)
+  classifyList.value = embyMovieTvList
+  underImgArr.value = []
+  swipeIndex.value = 0
+  setUnderImg()
+  setShowList()
 }
 
 //获取历史播放记录
@@ -185,15 +192,14 @@ setShowList()
 initSelect()
 getHistoryEmby()
 refreshEmby()
-// onShow(() => {
-//   let isreload = uni.getStorageSync('isreload')
-//   if (isreload) {
-//     uni.removeStorageSync('isreload')
-//     if (uni.getStorageSync('settingData').tmdbKey) {
-//       refreshEmby()
-//     }
-//   }
-// })
+onShow(() => {
+  let isreload = uni.getStorageSync('isreload')
+  if (isreload) {
+    uni.removeStorageSync('isreload')
+    refreshEmby()
+    getHistoryEmby()
+  }
+})
 </script>
 
 <style lang="scss" scoped>

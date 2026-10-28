@@ -119,6 +119,8 @@ import * as CONFIG from '@/utils/config'
 import { getEmbyMovieTv, getEmbySeasonList, getEmbyList, setEmbyImg, getSeasonTvList } from '@/utils/emby'
 import { calTime, handleSeasonName, handleSecond, debounce, parseTime } from '@/utils/scrape'
 import { judgeSelect } from '@/utils/tools'
+import { ipc } from '@/utils/ipcRenderer'
+import { ipcApiRoute } from '@/utils/ipcApiRoute'
 import actorList from '../home/components/actor-list.vue'
 import { useI18n } from 'vue-i18n'
 
@@ -289,20 +291,39 @@ const setButtonText = () => {
   }
 }
 
+//通过 createMpv 打开播放窗口
+const openMpvPlayer = (folderFileId: string | undefined) => {
+  if (!folderFileId) return
+  const args = {
+    type: 'vue',
+    content: '/video',
+    windowName: 'Video',
+    windowTitle: t('video.nowPlaying'),
+    opusId: '1',
+    windowsOption: {
+      frame: false,
+      width: 1358,
+      height: 841,
+      backgroundColor: '#000000',
+    },
+    query: {
+      folderFileId,
+      isEmby: 'true',
+    },
+  }
+  ipc.invoke(ipcApiRoute.createMpv, args).then((id: number) => {
+    console.log('[createWindow] id:', id)
+  })
+}
+
 //点击播放按钮
 const clickPlayButton = () => {
   uni.setStorageSync('overviewData', imgData.value)
   if (route.query.type == 'movie') {
-    uni.navigateTo({
-      url: `/pages/mobile/video/emby/emby-player?folderFileId=${route.query.movieTvId}&type=movie&movieName=${imgData.value.title}`,
-    })
+    openMpvPlayer(String(route.query.movieTvId))
   } else if (route.query.type == 'tv') {
     uni.setStorageSync('tvList', tvList.value)
-    let openEndTime: { noSetHistory: number } | Record<string, any> = {}
-    if (!route.query.movieTvId) openEndTime.noSetHistory = 0
-    uni.navigateTo({
-      url: `/pages/mobile/video/emby/emby-player?folderFileId=${tvList.value[0]?.id}&type=tv`,
-    })
+    openMpvPlayer(tvList.value[0]?.id)
   }
 }
 
@@ -310,14 +331,10 @@ const clickPlayButton = () => {
 const toPlayVideo = (item: TvEpisode, index: number) => {
   uni.setStorageSync('overviewData', imgData.value)
   if (route.query.type == 'movie') {
-    uni.navigateTo({
-      url: `/pages/mobile/video/emby/emby-player?folderFileId=${route.query.movieTvId}&type=movie&movieName=${imgData.value.title}`,
-    })
+    openMpvPlayer(String(route.query.movieTvId))
   } else if (route.query.type == 'tv') {
     uni.setStorageSync('tvList', tvList.value) //用于给视频播放器页面显示集数
-    uni.navigateTo({
-      url: `/pages/mobile/video/emby/emby-player?folderFileId=${item.id}&type=tv`,
-    })
+    openMpvPlayer(item.id)
   }
 }
 

@@ -45,7 +45,7 @@ import { computed, ref } from "vue";
 import wilNavbar from "@/components/mobile/wil-navbar/index.vue";
 import { onShow, onUnload } from "@dcloudio/uni-app";
 import { toParse, toStringfy } from "../mine/common";
-import { loginUser, get189Folder, getQuarkFolder } from "@/utils/common";
+import { loginUser, get189Folder, getQuarkFolder, getWopanFolder } from "@/utils/common";
 import showModal from "@/components/mobile/wil-modal/modal.js";
 import wilModal from "@/components/mobile/wil-modal/index.vue";
 import moreBlack from "@/static/more-black.png";
@@ -90,6 +90,10 @@ const getMapping = () => ({
       url: "https://pan.quark.cn",
       title: t('navbar.quarkCloudDrive'),
     },
+  },
+  "联通云盘": {
+    path: "/pages/mobile/source/add-wopan",
+    query: { title: t('source.unicomCloudDrive') },
   },
   "Emby": {
     path: "/pages/mobile/source/add-emby",
@@ -170,6 +174,17 @@ const handleSelect = (item, vitem) => {
           .catch((error) => {
             uni.showToast({
               title: t('source.reloginQuarkCloudDrive'),
+              icon: "none",
+            });
+          });
+      } else if (item.type == "联通云盘") {
+        await getWopanFolder({ folderId: "0" }, vitem)
+          .then(() => {
+            resetSelect(vitem);
+          })
+          .catch((error) => {
+            uni.showToast({
+              title: t('source.reloginUnicomCloudDrive'),
               icon: "none",
             });
           });

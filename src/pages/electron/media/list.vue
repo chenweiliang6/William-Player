@@ -40,7 +40,7 @@
 <script setup>
 import { nextTick, reactive, ref } from 'vue'
 import wilList from '@/components/mobile/wil-list/index.vue'
-import { loginUser, get189Folder, getQuarkFolder, getWebDAVUrl, get189DownloadUrl, getQuarkVideoUrl } from '@/utils/common.js'
+import { loginUser, get189Folder, getQuarkFolder, getWopanFolder, getWebDAVUrl, get189DownloadUrl, getQuarkVideoUrl, getWopanVideoUrl } from '@/utils/common.js'
 import mediaFolder from '@/static/media-folder.png'
 import { useRouter } from 'vue-router'
 import { ipc } from '@/utils/ipcRenderer'
@@ -92,7 +92,7 @@ const changeBreadcrumb = index => {
 
 //点击文件夹或者文件
 const clickMedia = async item => {
-  const typeArr = ['WebDAV', 'Emby', '天翼云盘', '夸克网盘']
+  const typeArr = ['WebDAV', 'Emby', '天翼云盘', '夸克网盘', '联通云盘']
   if (typeArr.includes(item.type)) state.selectMedia = item
   if (item.type === 'WebDAV') {
     let res = await loginUser(state.selectMedia)
@@ -111,6 +111,8 @@ const clickMedia = async item => {
     handleCloudDiskItem(item)
   } else if (state.selectMedia.type === '夸克网盘') {
     handleCloudDiskItem(item)
+  } else if (state.selectMedia.type === '联通云盘') {
+    handleCloudDiskItem(item)
   }
 }
 
@@ -127,6 +129,11 @@ const handleCloudDiskItem = async item => {
       initialFolderId: '0',
       getMediaUrl: getQuarkVideoUrl,
       parseImageUrl: res => res.data[0].download_url,
+    },
+    '联通云盘': {
+      initialFolderId: '0',
+      getMediaUrl: getWopanVideoUrl,
+      parseImageUrl: res => res.url,
     },
   }
   if (!state.selectMedia.name) return
@@ -261,6 +268,21 @@ const getFileList = async data => {
       v.folderFileId = v.fid
     })
     return { data: { content: res.data.list, total: res.metadata._total } }
+  } else if (state.selectMedia.type == '联通云盘') {
+    let res = await getWopanFolder({ folderId: state.historyPath[state.historyPath.length - 1]?.folderFileId || '0' }, state.selectMedia)
+    res.fileListAO.fileList.forEach(v => {
+      const lastIndex = v.name.lastIndexOf('.')
+      const format = v.name.substring(lastIndex + 1)
+      v.thumb = v.thumbUrl ? v.thumbUrl : getFormatIcon(format)
+      //type为0表示不是文件夹，是文件
+      v.type = 0
+      v.folderFileId = v.id
+    })
+    res.fileListAO.folderList.forEach(v => {
+      v.type = 1
+      v.folderFileId = v.id
+    })
+    return { data: { content: [...res.fileListAO.folderList, ...res.fileListAO.fileList], total: res.fileListAO.count } }
   } else {
     //初始化展示的时候
     let sourceList = uni.getStorageSync('sourceList')

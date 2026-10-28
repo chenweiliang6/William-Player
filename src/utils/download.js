@@ -1,5 +1,6 @@
 //该js文件用于下载方法
 import { i18n } from '@/i18n/index.js'
+import { getWebDAVUrl, get189VideoUrl, getQuarkVideoUrl, getWopanVideoUrl } from '@/utils/common'
 
 let DownloaderManager = null
 let downloadList = [] //下载列表
@@ -95,15 +96,14 @@ export const getDownloadUrl = async (item) => {
             let res = await getQuarkVideoUrl({ folderFileId: item.id }, selectMedia)
             return res.data[0].download_url
         }
+    } else if (selectType.type == '联通云盘') {
+        if (selectMedia.name) {
+            let res = await getWopanVideoUrl({ folderFileId: item.id }, selectMedia)
+            return res.url
+        }
     } else if (selectType.type == 'Emby') {
         if (selectMedia.name) {
-            let res = await getEmbyPlayerUrl(
-                {
-                    folderFileId: item.id,
-                },
-                selectMedia
-            )
-            return res.MediaSources[0].Path
+            return `${selectMedia.protocol}://${selectMedia.address}:${selectMedia.port}/emby/Items/${item.id}/Download?api_key=${selectMedia.token}`
         }
     }
 }

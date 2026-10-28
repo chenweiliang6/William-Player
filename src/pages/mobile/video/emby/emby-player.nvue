@@ -71,6 +71,7 @@ import { getWebDAVUrl, get189VideoUrl, loginUser, getQuarkResolutionUrl, getQuar
 import { calTime, handleSeasonName, generateChineseNumberMapping } from '@/utils/scrape'
 import { getEmbyPlayerUrl, setHistoryPlay } from '@/utils/emby'
 import { IMG_DOMAIN } from '@/utils/config'
+import i18n from '@/i18n'
 
 export default {
   components: {
@@ -169,6 +170,17 @@ export default {
           MediaSourceId: res.MediaSources[0].Id,
           PlaySessionId: res.PlaySessionId,
           initialTime: '0',
+          //本地历史记录字段（对齐通用播放器 historyPlay 记录格式）
+          type: this.routerParams.type,
+          sourceType: this.selectType.type,
+          sourceName: this.selectMedia.name,
+          name: this.routerParams.type == 'tv' ? this.tvList.find(i => i.id == this.routerParams.folderFileId)?.name : this.routerParams.movieName,
+          path: this.routerParams.type == 'tv' ? (this.routerParams.path ? decodeURIComponent(this.routerParams.path) : undefined) : this.routerParams.movieName,
+          title: this.config.title,
+          titlePlay: this.routerParams.titlePlay,
+          folderFileId: this.routerParams.folderFileId,
+          movieTvId: this.routerParams.movieTvId,
+          poster: this.config.poster,
         }
         return res
       }
@@ -178,6 +190,19 @@ export default {
       if (!this.routerParams.type) return
       this.historyObj.initialTime = Math.round(event.detail.currentTime)
       this.historyObj.PositionTicks = Math.round(this.secondsTo100Nanoseconds(Number(event.detail.currentTime)))
+      //维护本地历史数组，供 onUnload 写回 storage
+      let index = -1
+      if (this.routerParams.type == 'tv') {
+        index = this.historyPlay.findIndex(i => i.type == this.routerParams.type && i.movieTvId == this.historyObj.movieTvId && i.titlePlay == this.historyObj.titlePlay)
+      } else if (this.routerParams.type == 'movie') {
+        index = this.historyPlay.findIndex(i => i.type == this.routerParams.type && i.name == this.historyObj.name && i.sourceName == this.historyObj.sourceName)
+      }
+      if (index > -1) {
+        this.historyPlay.splice(index, 1)
+      }
+      if (this.historyObj.type) {
+        this.historyPlay.unshift(this.historyObj)
+      }
     },
     //初始化进入的时候，设置从哪儿开始播放
     setInitialTime() {},
@@ -204,7 +229,7 @@ export default {
     },
     pauseVideo() {
       if (this.routerParams.noSetHistory != 0 && this.routerParams.type) {
-        this.historyObj.PlaybackStartTimeTicks = secondsTo100Nanoseconds(Math.floor(Date.now() / 1000))
+        this.historyObj.PlaybackStartTimeTicks = this.secondsTo100Nanoseconds(Math.floor(Date.now() / 1000))
         setHistoryPlay(this.historyObj, this.selectMedia)
       }
     },
@@ -231,6 +256,14 @@ export default {
       this.config.initialTime = this.routerParams.openingTime ? +this.routerParams.openingTime : 0
       this.config.title = overviewData.title + ' ' + '第' + (currentIndex + 1) + '集 ' + this.tvList[currentIndex].name
       this.config.poster = this.tvList[currentIndex].poster
+      //切集时同步本地历史与服务器上报对象
+      this.historyObj.initialTime = 0
+      this.routerParams.folderFileId = this.tvList[currentIndex].id
+      this.historyObj.folderFileId = this.tvList[currentIndex].id
+      this.historyObj.name = this.tvList[currentIndex].name
+      this.historyObj.title = this.tvList[currentIndex].name
+      this.historyObj.ji = String(currentIndex + 1)
+      this.historyObj.poster = this.tvList[currentIndex].poster || this.historyObj.poster
       await this.setUrl()
     },
     getOrientation(event) {
@@ -287,7 +320,7 @@ export default {
     this.settingData = uni.getStorageSync('settingData')
     if (this.uniPlatform != 'app') {
       uni.showToast({
-        title: '目前仅支持AAC格式音频和内嵌字幕，不支持EAC3格式音频和外挂字幕',
+        title: i18n.global.t('video.embyAudioSubtitleLimit'),
         duration: 3000,
         icon: 'none',
       })
@@ -295,6 +328,7 @@ export default {
     this.routerParams = options
     this.seasonData = uni.getStorageSync('seasonData') || {}
     this.tvList = uni.getStorageSync('tvList') || []
+    this.historyPlay = (uni.getStorageSync('historyPlay') || []).filter(v => v.sourceType == this.selectType.type && v.sourceName == this.selectMedia.name)
     if (options.type == 'tv') {
       this.config.title = this.tvList.find(i => i.id == options.folderFileId).name
     } else if (options.type == 'movie') {

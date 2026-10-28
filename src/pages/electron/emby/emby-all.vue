@@ -113,9 +113,16 @@ const handlePushVideoDetail = (item: ListItem) => {
     })
   } else if (item.type == 'Series' || item.type == 'Movie') {
     //直接跳转到剧集或者电影的详情页
-    // uni.navigateTo({
-    //   url: `/pages/${CONFIG.PLATFORM === 'TV' ? 'tv' : 'mobile'}/video/emby/emby-detail?name=${handleSeasonName(item.name, true)}&type=${item.type == 'Series' ? 'tv' : 'movie'}&movieTvId=${item.id}&isEmby=true`,
-    // })
+    router.push({
+      path: '/embyDetail',
+      query: {
+        name: item.name,
+        title: item.name,
+        type: item.type == 'Series' ? 'tv' : 'movie',
+        movieTvId: item.id,
+        isEmby: 'true',
+      },
+    })
   }
 }
 onBeforeMount(() => {

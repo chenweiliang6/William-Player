@@ -24,7 +24,13 @@
       "Bash(node node_modules/@dcloudio/vite-plugin-uni/bin/uni.js build -p app-plus)",
       "Bash(node -e \"const zh=require\\('./i18n/zh-CN.js'\\).default||require\\('./i18n/zh-CN.js'\\);const en=require\\('./i18n/en-US.js'\\).default||require\\('./i18n/en-US.js'\\);\")",
       "Bash(node --input-type=module -e ' *)",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(cd /c/Users/Waylon.Chen/AppData/Local/Temp/wocloud_login_test && ls; cat go.mod 2>/dev/null; cat main.go 2>/dev/null | head -20)",
+      "Bash(go run *)",
+      "Bash(git -C \"E:\\\\Personal-Frontend-Project\\\\AlistGo\" log --oneline -5 -- drivers/emby)",
+      "Bash(go env *)",
+      "Bash(ls \"$\\(go env GOPATH \\)/pkg/mod/github.com/xhofe 2>/dev/null\")",
+      "Read(//c/Users/Waylon.Chen/go/pkg/mod/github.com/xhofe/**)"
     ]
   }
 }
