@@ -32,7 +32,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { loginUser, get189Folder, getQuarkFolder, getWopanFolder } from "@/utils/common";
+import { loginUser, get189Folder, getQuarkFolder, getWopanFolder, get139Folder } from "@/utils/common";
 import { useThemeColors } from '@/hooks/useThemeColors'
 import { useThemeClass } from '@/hooks/useThemeClass'
 
@@ -118,6 +118,19 @@ const handleSelect = async (item, vitem) => {
                 uni.hideLoading();
                 uni.showToast({
                     title: t('source.reloginUnicomCloudDrive'),
+                    icon: "none",
+                });
+            });
+    } else if (item.type == "移动云盘") {
+        await get139Folder({ folderId: "root" }, vitem)
+            .then((res) => {
+                uni.hideLoading();
+                emits('openFolder', item, vitem, res)
+            })
+            .catch((error) => {
+                uni.hideLoading();
+                uni.showToast({
+                    title: t('source.reloginCloud139'),
                     icon: "none",
                 });
             });

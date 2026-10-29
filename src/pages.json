@@ -1,90 +1,289 @@
 {
-    "pages": [
-        {
-            "path": "pages/mobile/mine/entry",
-            "style": {
-                "navigationStyle": "custom"
-            }
-        },
-        {
-            "path": "pages/tv/video/index",
-            "style": {
-                "navigationStyle": "custom"
-            }
-        },
-        {
-            "path": "pages/tv/video/video-all",
-            "style": {
-                "navigationStyle": "custom"
-            }
-        },
-        {
-            "path": "pages/tv/video/video-detail",
-            "style": {
-                "navigationStyle": "custom"
-            }
-        },
-        {
-            "path": "pages/tv/video/video-player",
-            "style": {
-                "navigationStyle": "custom"
-            }
-        },
-        {
-            "path": "pages/tv/mine/data-sync",
-            "style": {
-                "navigationStyle": "custom"
-            }
-        },
-        {
-            "path": "pages/tv/mine/about-version",
-            "style": {
-                "navigationStyle": "custom"
-            }
-        },
-        {
-            "path": "pages/tv/source/code-input",
-            "style": {
-                "navigationStyle": "custom"
-            }
-        },
-        {
-            "path": "pages/tv/source/catelog-settings",
-            "style": {
-                "navigationStyle": "custom"
-            }
-        },
-        {
-            "path": "pages/tv/mine/appreciate",
-            "style": {
-                "navigationStyle": "custom"
-            }
-        },
-        {
-            "path": "pages/tv/mine/enter-qqgroup",
-            "style": {
-                "navigationStyle": "custom"
-            }
-        },
-        {
-            "path": "pages/mobile/backend/cloud189-webview",
-            "style": {
-                "navigationStyle": "custom"
-            }
-        },
-        {
-            "path": "pages/mobile/backend/quark-webview",
-            "style": {
-                "navigationStyle": "custom"
-            }
-        }
-    ],
-    "globalStyle": {
-        "navigationBarTextStyle": "@navigationBarTextStyle",
-        "navigationBarTitleText": "William Player",
-        "navigationBarBackgroundColor": "@navigationBarBackgroundColor",
-        "backgroundColor": "@backgroundColor",
-        "rpxCalcMaxDeviceWidth": 700
+  "pages": [
+    {
+      "path": "pages/mobile/mine/entry",
+      "style": {
+        "navigationStyle": "custom"
+      }
     },
-    "uniIdRouter": {}
+    {
+      "path": "pages/mobile/backend/index",
+      "style": {}
+    },
+    {
+      "path": "pages/mobile/backend/data-sync",
+      "style": {
+        "navigationBarTitleText": "%navbar.dataSync%"
+      }
+    },
+    {
+      "path": "pages/mobile/backend/about-version",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/mobile/backend/appreciate",
+      "style": {
+        "navigationBarTitleText": "%navbar.appreciate%"
+      }
+    },
+    {
+      "path": "pages/mobile/backend/cloud189-webview",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/mobile/backend/quark-webview",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/mobile/backend/operation-guide",
+      "style": {
+        "navigationBarTitleText": "%navbar.operationGuide%"
+      }
+    },
+    {
+      "path": "pages/mobile/live/index",
+      "style": {
+        "navigationBarTitleText": "%navbar.live%"
+      }
+    },
+    {
+      "path": "pages/mobile/live/list",
+      "style": {
+        "navigationBarTitleText": "%navbar.liveList%"
+      }
+    },
+    {
+      "path": "pages/mobile/media/list",
+      "style": {
+        "navigationBarTitleText": "%navbar.mediaLibrary%"
+      }
+    },
+    {
+      "path": "pages/mobile/media/catelog-list",
+      "style": {
+        "navigationBarTitleText": ""
+      }
+    },
+    {
+      "path": "pages/mobile/media/catelog-setting",
+      "style": {
+        "navigationBarTitleText": "%navbar.catelogSetting%"
+      }
+    },
+    {
+      "path": "pages/mobile/media/catelog-mulu",
+      "style": {
+        "navigationBarTitleText": ""
+      }
+    },
+    {
+      "path": "pages/mobile/source/source-list",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/mobile/source/file-source",
+      "style": {
+        "navigationBarTitleText": "%navbar.addFileSource%"
+      }
+    },
+    {
+      "path": "pages/mobile/source/add-webdav",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/mobile/source/add-emby",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/mobile/source/add-cloud189",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/mobile/source/add-wopan",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/mobile/source/add-cloud139",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/mobile/video/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/mobile/video/search",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/mobile/video/search-match",
+      "style": {
+        "navigationBarTitleText": "%navbar.editInformation%",
+        "navigationBarBackgroundColor": "@navigationBarBackgroundColor1"
+      }
+    },
+    {
+      "path": "pages/mobile/video/video-detail",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/mobile/video/emby/emby-detail",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/mobile/video/emby/emby-player",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/mobile/video/video-all",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/mobile/video/history-played",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/mobile/video/video-player",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/mobile/toolbox/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/mobile/toolbox/express/search",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/mobile/toolbox/download/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/mobile/toolbox/chat/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/mobile/mine/userInfo/index",
+      "style": {
+        "navigationBarTitleText": "%navbar.personalCenter%"
+      }
+    },
+    {
+      "path": "pages/mobile/mine/userInfo/edit",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/mobile/mine/settings",
+      "style": {
+        "navigationBarTitleText": "%navbar.settings%"
+      }
+    },
+    {
+      "path": "pages/mobile/mine/index",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/mobile/mine/login",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/mobile/mine/register",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/mobile/mine/forget",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/mobile/mine/no-permission",
+      "style": {
+        "navigationStyle": "custom"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "@navigationBarTextStyle",
+    "navigationBarTitleText": "William Player",
+    "navigationBarBackgroundColor": "@navigationBarBackgroundColor",
+    "backgroundColor": "@backgroundColor",
+    "rpxCalcMaxDeviceWidth": 700
+  },
+  "uniIdRouter": {},
+  "tabBar": {
+    //打包tv端需要将tabbar隐藏，否则返回上一级页面，无法获取焦点
+    "color": "#86909C",
+    "selectedColor": "#ff6701",
+    "backgroundColor": "@tabBarBackgroundColor",
+    "list": [
+      {
+        "pagePath": "pages/mobile/video/index",
+        "text": "媒体库",
+        "iconPath": "static/video.png",
+        "selectedIconPath": "static/video-active.png"
+      },
+      {
+        "pagePath": "pages/mobile/live/index",
+        "text": "直播",
+        "iconPath": "static/live.png",
+        "selectedIconPath": "static/live-active.png"
+      },
+      {
+        "pagePath": "pages/mobile/mine/index",
+        "text": "我的",
+        "iconPath": "static/mine.png",
+        "selectedIconPath": "static/mine-active.png"
+      }
+    ]
+  }
 }

@@ -36,6 +36,10 @@
                         :showButton="true" :buttonText="t('source.accountLogin')" type="steps" v-if="activeTab === '联通云盘'" ref="wopan_form"
                         @confirm="confirmSubmit" @triggerBoundary="triggerBoundary">
                     </tv-form>
+                    <tv-form labelPosition="top" :options="cloud139FormOptions" v-model="state.cloud139FormData"
+                        :showButton="true" :buttonText="t('source.accountLogin')" type="steps" v-if="activeTab === '移动云盘'" ref="cloud139_form"
+                        @confirm="confirmSubmit" @triggerBoundary="triggerBoundary">
+                    </tv-form>
                 </div>
             </div>
         </div>
@@ -55,6 +59,8 @@ import { initLoginParam, login189 } from "@/utils/cloud189/login.js";
 import { persist189Token, save189Password } from "@/utils/cloud189/store.js";
 import { wopanLogin } from "@/utils/wopan/login.js";
 import { persistWopanToken } from "@/utils/wopan/store.js";
+import { login139 } from "@/utils/cloud139/login.js";
+import { persist139Token, save139Password } from "@/utils/cloud139/store.js";
 
 const { t } = useI18n()
 const wilQrcodeRef = ref(null);
@@ -62,6 +68,7 @@ const webdav_form = ref(null)
 const emby_form = ref(null)
 const cloud189_form = ref(null)
 const wopan_form = ref(null)
+const cloud139_form = ref(null)
 
 const routerParams = ref({})
 
@@ -77,7 +84,8 @@ const tabsList = computed(() => [
     { value: 'Emby', name: 'Emby', active: activeTab.value === 'Emby' },
     { value: '天翼云盘', name: t('navbar.tianyiCloudDrive'), active: activeTab.value === '天翼云盘' },
     { value: '夸克网盘', name: t('navbar.quarkCloudDrive'), active: activeTab.value === '夸克网盘' },
-    { value: '联通云盘', name: t('source.unicomCloudDrive'), active: activeTab.value === '联通云盘' }
+    { value: '联通云盘', name: t('source.unicomCloudDrive'), active: activeTab.value === '联通云盘' },
+    { value: '移动云盘', name: t('source.cloud139Label'), active: activeTab.value === '移动云盘' }
 ])
 
 const focusModel = ref('tabs')//当前键盘控制器在哪个组件上
@@ -98,6 +106,9 @@ const state = reactive({
     wopanFormData: {},
     needWopanSms: false,
     wopanLoading: false,
+    //移动云盘账密登录
+    cloud139FormData: {},
+    cloud139Loading: false,
 })
 const protocolOptions = [
     { label: 'HTTP', value: 'http' },
@@ -183,6 +194,20 @@ const wopanFormOptions = computed(() => {
     return opts
 })
 
+//移动云盘表单：手机号+密码，无验证码
+const cloud139FormOptions = computed(() => [
+    {
+        label: t('source.cloud139Phone'), prop: 'phone', type: 'input',
+        formItemProps: { placeholder: t('source.cloud139PhonePlaceholder'), type: 'text' },
+        rule: [{ required: true, message: t('source.cloud139PhonePlaceholder') }],
+    },
+    {
+        label: t('source.password'), prop: 'password', type: 'input',
+        formItemProps: { placeholder: t('source.cloud139PasswordPlaceholder'), type: 'password' },
+        rule: [{ required: true, message: t('source.pleaseInputPassword') }],
+    },
+])
+
 
 // #ifdef APP-PLUS
 let ipAddress = ''
@@ -247,13 +272,14 @@ const changeTab = (item, index) => {
 const keyCodeClick = (keyCode) => {
     if (focusModel.value === 'tabs') { //在上面tabs中切换的时候
         if (keyCode === "KeyDown") { //往下就是到下面的输入form，夸克跳webview不能往下
-            if (activeTab.value === 'WebDAV' || activeTab.value === 'Emby' || activeTab.value === '天翼云盘' || activeTab.value === '联通云盘') {
+            if (activeTab.value === 'WebDAV' || activeTab.value === 'Emby' || activeTab.value === '天翼云盘' || activeTab.value === '联通云盘' || activeTab.value === '移动云盘') {
                 focusModel.value = 'form'
                 tabIndex.value = tabsList.value.findIndex(v => v.value === activeTab.value)
                 activeTab.value === 'WebDAV' ? webdav_form.value.evtMove(keyCode)
                     : activeTab.value === 'Emby' ? emby_form.value.evtMove(keyCode)
                         : activeTab.value === '天翼云盘' ? cloud189_form.value.evtMove(keyCode)
-                            : wopan_form.value.evtMove(keyCode)
+                            : activeTab.value === '联通云盘' ? wopan_form.value.evtMove(keyCode)
+                                : cloud139_form.value.evtMove(keyCode)
             }
         } else if (keyCode === "KeyLeft") {
             if (tabIndex.value > 0) {
@@ -277,6 +303,8 @@ const keyCodeClick = (keyCode) => {
             cloud189_form.value.evtMove(keyCode)
         } else if (activeTab.value === '联通云盘') {
             wopan_form.value.evtMove(keyCode)
+        } else if (activeTab.value === '移动云盘') {
+            cloud139_form.value.evtMove(keyCode)
         }
     }
 };
@@ -305,6 +333,12 @@ const confirmSubmit = () => {
         wopan_form.value.submitForm(valid => {
             if (valid) {
                 submitWopan()
+            }
+        })
+    } else if (activeTab.value === '移动云盘') {
+        cloud139_form.value.submitForm(valid => {
+            if (valid) {
+                submit139()
             }
         })
     }
@@ -380,6 +414,31 @@ const submitWopan = async () => {
         uni.showToast({ title: e.message || t('source.loginFailed'), icon: 'none' })
     } finally {
         state.wopanLoading = false
+    }
+}
+
+//移动云盘三步链登录：手机号+密码 → token 落库
+const submit139 = async () => {
+    if (state.cloud139Loading) return
+    const { phone, password } = state.cloud139FormData
+    state.cloud139Loading = true
+    try {
+        const result = await login139(phone, password)
+        save139Password(phone, phone, password)
+        const { isNew } = persist139Token({ phone, authorization: result.authorization, account: result.account }, {})
+        uni.showToast({ title: isNew ? t('source.addAccountSuccess') : t('source.modifyAccountSuccess'), icon: 'none' })
+        uni.setStorageSync('isreload', true)
+        setTimeout(() => {
+            uni.switchTab({ url: '/pages/mobile/video/index' })
+        }, 1500)
+    } catch (e) {
+        // 风控/账密错误映射为专用提示，其余按 message 兜底
+        let title = e.message || t('source.loginFailed')
+        if (e.code == 'CLOUD139_RISK_CONTROL') title = t('source.cloud139RiskControl')
+        if (e.code == 'CLOUD139_AUTH_FAILED') title = t('source.cloud139AuthFailed')
+        uni.showToast({ title, icon: 'none' })
+    } finally {
+        state.cloud139Loading = false
     }
 }
 

@@ -1,5 +1,5 @@
 import { computed, onBeforeMount, ref, nextTick, watch } from 'vue'
-import { loginUser, getFolder, get189Folder, getQuarkFolder, getWopanFolder, getTvSeason, getMovieTvById } from '@/utils/common'
+import { loginUser, getFolder, get189Folder, getQuarkFolder, getWopanFolder, get139Folder, getTvSeason, getMovieTvById } from '@/utils/common'
 import { parseTime, calTime, handleSecond, handleSeasonName, extractSeasonNumber, generateChineseNumberMapping } from '@/utils/scrape'
 import { onShow, onLoad, onUnload } from '@dcloudio/uni-app'
 import editIcon from '@/static/edit_icon.png'
@@ -158,6 +158,7 @@ export function useVideoDetail({ route, router }) {
       '189CloudPC': t('source.tianyiCloudDriveLabel'),
       Quark: t('source.quarkCloudDriveLabel'),
       WoPan: t('source.unicomCloudDrive'),
+      Cloud139: t('source.cloud139Label'),
       unknown: t('common.unknown'),
     }
     return mapping[provider] || provider
@@ -261,6 +262,12 @@ export function useVideoDetail({ route, router }) {
         prop: 'fileListAO.fileList',
         name: 'name',
       },
+      '移动云盘': {
+        apiFunction: get139Folder,
+        params: { folderId: activeSeason.value.folderFileId },
+        prop: 'fileListAO.fileList',
+        name: 'name',
+      },
     }
     try {
       result = await apiMapping[type].apiFunction(apiMapping[type].params, selectMedia.value)
@@ -316,6 +323,15 @@ export function useVideoDetail({ route, router }) {
           name: i.name,
           ji: i.ji,
           provider: 'WoPan',
+        }
+      })
+    } else if (type === '移动云盘') {
+      tvList.value = tvList.value.map(i => {
+        return {
+          id: i.id,
+          name: i.name,
+          ji: i.ji,
+          provider: 'Cloud139',
         }
       })
     }

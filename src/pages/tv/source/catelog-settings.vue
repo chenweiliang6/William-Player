@@ -54,7 +54,7 @@ import sourceList from '../video/components/index-component/source-list.vue'
 import wilList from '@/components/mobile/wil-list/index.vue'
 import { useSelectFolder } from '@/hooks/useSelectFolder'
 import { onLoad } from '@dcloudio/uni-app'
-import { loginUser, getFolder, getTvSeason, get189Folder, getQuarkFolder, getCutContent } from '@/utils/common'
+import { loginUser, getFolder, getTvSeason, get189Folder, getQuarkFolder, get139Folder, getCutContent } from '@/utils/common'
 import { debounce } from '@/utils/scrape'
 
 const { t } = useI18n()
@@ -253,6 +253,20 @@ const handleSelect = async (item, vitem) => {
         uni.hideLoading()
         uni.showToast({
           title: t('source.reloginQuarkCloudDrive'),
+          icon: 'none',
+        })
+      })
+  } else if (item.type == '移动云盘') {
+    await get139Folder({ folderId: 'root' }, vitem)
+      .then(res => {
+        uni.hideLoading()
+        result.value = res
+        requestParams.value = {}
+      })
+      .catch(error => {
+        uni.hideLoading()
+        uni.showToast({
+          title: t('source.reloginCloud139'),
           icon: 'none',
         })
       })

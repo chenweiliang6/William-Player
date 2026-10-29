@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "pc-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:pc"],
+      "port": 5173
+    },
+    {
+      "name": "mobile-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:mobile"],
+      "port": 5173
+    },
+    {
+      "name": "tv-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:tv"],
+      "port": 5173
+    }
+  ]
+}

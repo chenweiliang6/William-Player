@@ -8,7 +8,7 @@
 import { onBeforeMount, reactive, ref } from 'vue'
 import mpvPlayer from './components/mpv-player.vue'
 import { useRoute } from 'vue-router'
-import { getWebDAVUrl, get189VideoUrl, loginUser, getQuarkResolutionUrl, getQuarkVideoUrl, getWopanVideoUrl, getFolder, getTvSeason, get189Folder, getQuarkFolder } from '@/utils/common'
+import { getWebDAVUrl, get189VideoUrl, loginUser, getQuarkResolutionUrl, getQuarkVideoUrl, getWopanVideoUrl, get139VideoUrl, getFolder, getTvSeason, get189Folder, getQuarkFolder } from '@/utils/common'
 import { calTime, handleSeasonName, generateChineseNumberMapping } from '@/utils/scrape'
 import { addOperLog } from '@/network/apis'
 import { IMG_DOMAIN } from '@/utils/config'
@@ -95,6 +95,16 @@ const getVideoUrl = async () => {
       )
       return res
     }
+  } else if (selectType.type == '移动云盘') {
+    if (selectMedia.name) {
+      let res = await get139VideoUrl(
+        {
+          folderFileId: route.query.folderFileId,
+        },
+        selectMedia
+      )
+      return res
+    }
   } else if (selectType.type == 'Emby') {
     if (selectMedia.name) {
       let res = await getEmbyPlayerUrl(
@@ -137,6 +147,8 @@ const setUrl = async () => {
     //   },
     // })
   } else if (selectType.type == '联通云盘') {
+    config.url = res.url
+  } else if (selectType.type == '移动云盘') {
     config.url = res.url
   } else if (selectType.type == '夸克网盘') {
     if (res.data.video_list[0].video_info?.url) {

@@ -1,4 +1,4 @@
-import { getFolder, get189Folder, getQuarkFolder, getWopanFolder } from './common'
+import { getFolder, get189Folder, getQuarkFolder, getWopanFolder, get139Folder } from './common'
 import dayjs from 'dayjs'
 import customParseFormat from 'dayjs/plugin/customParseFormat'
 
@@ -317,6 +317,27 @@ const recursionMovie = async (data, movieArr, selectType, selectMedia, refreshDa
         }
       })
     }
+  } else if (selectType.type == '移动云盘') {
+    let result = await get139Folder({ folderId: data.id }, selectMedia)
+    if (result.fileListAO.folderList) {
+      await Promise.allSettled(
+        result.fileListAO.folderList.map(async item => {
+          item.provider = 'Cloud139'
+          item.path = data.path + '/' + item.name
+          await recursionMovie(item, movieArr, selectType, selectMedia, refreshData)
+        })
+      )
+    }
+    if (result.fileListAO.fileList) {
+      result.fileListAO.fileList.forEach(item => {
+        item.path = data.path + '/' + item.name
+        item.provider = 'Cloud139'
+        if (videoFormat.some(v => item.name.includes(v))) {
+          refreshData.found++
+          movieArr.push(item)
+        }
+      })
+    }
   }
 }
 
@@ -529,6 +550,65 @@ const recursionTv = async (data, parent, tvArr, selectType, selectMedia, refresh
           shouldSkip = true
           // wopan createTime 为 yyyyMMddHHmmss 字符串
           const fmtTime = str => (str ? dayjs(str, 'YYYYMMDDHHmmss').format('YYYY-MM-DD HH:mm:ss') : '')
+          if (startsWithSeasonFormat(data.name)) {
+            if (!tvArr.find(j => j.path == parent.path)) {
+              refreshData.found++
+            }
+            tvArr.push({
+              ...parent,
+              createTime: fmtTime(parent.createTime),
+              updateTime: fmtTime(parent.createTime),
+              folderFileId: data.id,
+              season: extractSeasonNumber(data.name),
+              seasonPath: parent.path + '/' + data.name,
+            })
+          } else {
+            if (data.name.includes(handleSeasonName(parent.name))) {
+              if (!tvArr.find(j => j.path == parent.path)) {
+                refreshData.found++
+              }
+              tvArr.push({
+                ...parent,
+                createTime: fmtTime(parent.createTime),
+                updateTime: fmtTime(parent.createTime),
+                folderFileId: data.id,
+                season: extractSeasonNumber(data.name),
+                seasonPath: parent.path + '/' + data.name,
+              })
+            } else {
+              refreshData.found++
+              tvArr.push({
+                ...data,
+                createTime: fmtTime(data.createTime),
+                updateTime: fmtTime(data.createTime),
+                folderFileId: data.id,
+                season: '1',
+                seasonPath: data.path,
+              })
+            }
+          }
+        }
+      }
+    }
+  } else if (selectType.type == '移动云盘') {
+    let result = await get139Folder({ folderId: data.id }, selectMedia)
+    if (result.fileListAO.folderList) {
+      for (const child of result.fileListAO.folderList) {
+        child.provider = 'Cloud139'
+        child.path = data.path + '/' + child.name
+        await recursionTv(child, data, tvArr, selectType, selectMedia, refreshData)
+      }
+    }
+    if (result.fileListAO.fileList) {
+      let shouldSkip = false // 全局标记跳过继续循环
+      for (const child of result.fileListAO.fileList) {
+        if (shouldSkip) break
+        child.path = data.path + '/' + child.name
+        child.provider = 'Cloud139'
+        if (!shouldSkip && videoFormat.some(v => child.name.includes(v))) {
+          shouldSkip = true
+          // 139 createTime 为 ISO 字符串，直接格式化
+          const fmtTime = str => (str ? dayjs(str).format('YYYY-MM-DD HH:mm:ss') : '')
           if (startsWithSeasonFormat(data.name)) {
             if (!tvArr.find(j => j.path == parent.path)) {
               refreshData.found++

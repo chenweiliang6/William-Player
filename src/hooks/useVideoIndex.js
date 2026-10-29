@@ -1,6 +1,6 @@
 import { ref, onBeforeMount } from 'vue'
 import { setTmdbKey, getUntokenDicts, addOperLog } from '@/network/apis'
-import { loginUser, getFolder, getTvSeason, get189Folder, getQuarkFolder, getWopanFolder, getCutContent } from '@/utils/common'
+import { loginUser, getFolder, getTvSeason, get189Folder, getQuarkFolder, getWopanFolder, get139Folder, getCutContent } from '@/utils/common'
 import { handleSeasonName, handleNameYear, recursionMovie, recursionTv, extractSeasonNumber, generateChineseNumberMapping } from '@/utils/scrape'
 import { toStringfy } from '@/pages/mobile/mine/common'
 import { onShow, onUnload } from '@dcloudio/uni-app'
@@ -466,6 +466,13 @@ export function useVideoIndex({ wil_modal }) {
       logTitle: t('video.wopanPosterWallGenerated'),
     })
 
+  //移动云盘refresh
+  const refresh139Video = () =>
+    refreshPosterWall({
+      scan: get139MovieTv,
+      logTitle: t('video.cloud139PosterWallGenerated'),
+    })
+
   //根据设定好的文件路径查找联通云盘的文件（结构对齐 get189MovieTv）
   const getWopanMovieTv = async () => {
     let muluData = uni.getStorageSync('muluData') || {}
@@ -516,6 +523,69 @@ export function useVideoIndex({ wil_modal }) {
             tvResult.fileListAO.folderList.map(async v => {
               v.path = h.path + '/' + v.name
               v.provider = 'WoPan'
+              await recursionTv(v, {}, movieTvData.value.tv, selectType.value, selectMedia.value, refreshData.value)
+            })
+          )
+        })
+      )
+    } else {
+      uni.showToast({
+        title: t('source.pleaseSetTvDirectory'),
+        icon: 'none',
+      })
+    }
+  }
+
+  //根据设定好的文件路径查找移动云盘的文件（结构对齐 getWopanMovieTv）
+  const get139MovieTv = async () => {
+    let muluData = uni.getStorageSync('muluData') || {}
+    let movieMulu = muluData.movie?.filter(v => v.name == selectMedia.value.name)
+    let tvMulu = muluData.tv?.filter(v => v.name == selectMedia.value.name)
+    if (!movieMulu?.length && !tvMulu?.length) {
+      uni.showToast({
+        title: t('media.pleaseSetMovieTvDirectory'),
+        icon: 'none',
+      })
+      return
+    }
+    scrollTop.value = 0
+    refreshLoading.value = true
+
+    if (movieMulu?.length) {
+      await Promise.allSettled(
+        movieMulu.map(async h => {
+          let movieResult = await get139Folder({ folderId: h.folderFileId }, selectMedia.value)
+          let movieArr = movieResult.fileListAO.fileList.filter(v => {
+            v.path = h.path + '/' + v.name
+            v.provider = 'Cloud139'
+            return VIDEO_FORMAT.some(i => v.name.includes(i))
+          })
+          refreshData.value.found += movieArr.length
+          movieTvData.value.movie.push(...movieArr)
+          await Promise.allSettled(
+            movieResult.fileListAO.folderList.map(async v => {
+              v.path = h.path + '/' + v.name
+              v.provider = 'Cloud139'
+              await recursionMovie(v, movieTvData.value.movie, selectType.value, selectMedia.value, refreshData.value)
+            })
+          )
+        })
+      )
+    } else {
+      uni.showToast({
+        title: t('source.pleaseSetMovieDirectory'),
+        icon: 'none',
+      })
+    }
+    if (tvMulu?.length) {
+      await Promise.allSettled(
+        tvMulu.map(async h => {
+          let tvResult = await get139Folder({ folderId: h.folderFileId }, selectMedia.value)
+          if (!tvResult.fileListAO.folderList) tvResult.fileListAO.folderList = []
+          await Promise.allSettled(
+            tvResult.fileListAO.folderList.map(async v => {
+              v.path = h.path + '/' + v.name
+              v.provider = 'Cloud139'
               await recursionTv(v, {}, movieTvData.value.tv, selectType.value, selectMedia.value, refreshData.value)
             })
           )
@@ -659,6 +729,8 @@ export function useVideoIndex({ wil_modal }) {
       await refreshQuarkVideo()
     } else if (selectType.value.type == '联通云盘') {
       await refreshWopanVideo()
+    } else if (selectType.value.type == '移动云盘') {
+      await refresh139Video()
     } else if (selectType.value.type == 'Emby') {
       await refreshEmby()
     }
@@ -718,7 +790,20 @@ export function useVideoIndex({ wil_modal }) {
           list: [],
           img: 'https://is1-ssl.mzstatic.com/image/thumb/Purple126/v4/a1/63/38/a16338a7-ba51-498a-5180-7327b46ca2b7/AppIcon-0-0-1x_U007emarketing-0-0-0-0-85-220.png/350x350.png',
         },
+        {
+          type: '移动云盘',
+          list: [],
+          img: 'https://is1-ssl.mzstatic.com/image/thumb/Purple126/v4/a1/63/38/a16338a7-ba51-498a-5180-7327b46ca2b7/AppIcon-0-0-1x_U007emarketing-0-0-0-0-85-220.png/350x350.png',
+        },
       ]
+      uni.setStorageSync('sourceList', sourceList.value)
+    } else if (!sourceList.value.some(v => v.type == '移动云盘')) {
+      //老用户的 storage 里没有移动云盘分组，补齐避免 persist139Token 静默失败
+      sourceList.value.push({
+        type: '移动云盘',
+        list: [],
+        img: 'https://is1-ssl.mzstatic.com/image/thumb/Purple126/v4/a1/63/38/a16338a7-ba51-498a-5180-7327b46ca2b7/AppIcon-0-0-1x_U007emarketing-0-7-0-0-85-220.png/350x350.png',
+      })
       uni.setStorageSync('sourceList', sourceList.value)
     }
   }
@@ -791,6 +876,15 @@ export function useVideoIndex({ wil_modal }) {
           video_navbar.value.showProgress()
         }
       }
+    } else if (selectType.value.type == '移动云盘') {
+      let isreload = uni.getStorageSync('isreload')
+      if (isreload || prevPage == 'pages/mobile/backend/data-sync') {
+        scrollTop.value = 0
+        uni.removeStorageSync('isreload')
+        if (uni.getStorageSync('settingData').tmdbKey) {
+          video_navbar.value.showProgress()
+        }
+      }
     } else if (selectType.value.type == 'Emby') {
       let isreload = uni.getStorageSync('isreload')
       if (isreload || prevPage == 'pages/mobile/backend/data-sync') {
@@ -851,6 +945,11 @@ export function useVideoIndex({ wil_modal }) {
     } else if (selectType.value.type == '联通云盘') {
       if (selectMedia.value.name) {
         // let res = await getWopanFolder({ folderId: "0" }, selectMedia.value);
+        // listData.value = [res.fileListAO];
+      }
+    } else if (selectType.value.type == '移动云盘') {
+      if (selectMedia.value.name) {
+        // let res = await get139Folder({ folderId: "root" }, selectMedia.value);
         // listData.value = [res.fileListAO];
       }
     }

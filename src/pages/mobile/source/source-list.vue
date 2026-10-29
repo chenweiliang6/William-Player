@@ -45,7 +45,7 @@ import { computed, ref } from "vue";
 import wilNavbar from "@/components/mobile/wil-navbar/index.vue";
 import { onShow, onUnload } from "@dcloudio/uni-app";
 import { toParse, toStringfy } from "../mine/common";
-import { loginUser, get189Folder, getQuarkFolder, getWopanFolder } from "@/utils/common";
+import { loginUser, get189Folder, getQuarkFolder, getWopanFolder, get139Folder } from "@/utils/common";
 import showModal from "@/components/mobile/wil-modal/modal.js";
 import wilModal from "@/components/mobile/wil-modal/index.vue";
 import moreBlack from "@/static/more-black.png";
@@ -94,6 +94,10 @@ const getMapping = () => ({
   "联通云盘": {
     path: "/pages/mobile/source/add-wopan",
     query: { title: t('source.unicomCloudDrive') },
+  },
+  "移动云盘": {
+    path: "/pages/mobile/source/add-cloud139",
+    query: { title: t('source.cloud139Label') },
   },
   "Emby": {
     path: "/pages/mobile/source/add-emby",
@@ -185,6 +189,17 @@ const handleSelect = (item, vitem) => {
           .catch((error) => {
             uni.showToast({
               title: t('source.reloginUnicomCloudDrive'),
+              icon: "none",
+            });
+          });
+      } else if (item.type == "移动云盘") {
+        await get139Folder({ folderId: "root" }, vitem)
+          .then(() => {
+            resetSelect(vitem);
+          })
+          .catch((error) => {
+            uni.showToast({
+              title: t('source.reloginCloud139'),
               icon: "none",
             });
           });

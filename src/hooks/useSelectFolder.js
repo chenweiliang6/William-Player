@@ -1,5 +1,5 @@
 import { ref, defineEmits, unref } from 'vue'
-import { get189Folder, getQuarkFolder, getWopanFolder, getWebDAVUrl, get189DownloadUrl, getQuarkVideoUrl } from '@/utils/common.js'
+import { get189Folder, getQuarkFolder, getWopanFolder, get139Folder, getWebDAVUrl, get189DownloadUrl, getQuarkVideoUrl } from '@/utils/common.js'
 import Folder from '@/static/folder.png'
 import videoPlayer from '@/static/video-player.png'
 import photoIcon from '@/static/photo-icon.png'
@@ -189,6 +189,34 @@ export function useSelectFolder({ selectType, selectMedia, result, title, catalo
         v.folderFileId = v.id
       })
       return { data: { content: [...res.fileListAO.folderList, ...res.fileListAO.fileList], total: res.fileListAO.count } }
+    } else if (unref(selectType).type == '移动云盘') {
+      if (isInit.value) {
+        //初始化用传过来的res（139 根目录）
+        isInit.value = false
+        folderFileIdArr.value.push('root')
+        let result1 = JSON.parse(JSON.stringify(unref(result)))
+        result1.fileListAO.fileList.forEach(v => {
+          if (v.thumbUrl) v.thumb = v.thumbUrl
+          v.type = 0
+          v.folderFileId = v.id
+        })
+        result1.fileListAO.folderList.forEach(v => {
+          v.type = 1
+          v.folderFileId = v.id
+        })
+        return { data: { content: [...result1.fileListAO.folderList, ...result1.fileListAO.fileList], total: result1.fileListAO.count } }
+      }
+      let res = await get139Folder({ folderId: folderFileId.value }, unref(selectMedia))
+      res.fileListAO.fileList.forEach(v => {
+        if (v.thumbUrl) v.thumb = v.thumbUrl
+        v.type = 0
+        v.folderFileId = v.id
+      })
+      res.fileListAO.folderList.forEach(v => {
+        v.type = 1
+        v.folderFileId = v.id
+      })
+      return { data: { content: [...res.fileListAO.folderList, ...res.fileListAO.fileList], total: res.fileListAO.count } }
     }
   }
   const clickCell = async item => {
@@ -206,6 +234,10 @@ export function useSelectFolder({ selectType, selectMedia, result, title, catalo
         folderFileId.value = item.folderFileId
         key.value === '1' ? (key.value = '2') : (key.value = '1')
       } else if (unref(selectType).type == '联通云盘') {
+        folderFileIdArr.value.push(item.folderFileId)
+        folderFileId.value = item.folderFileId
+        key.value === '1' ? (key.value = '2') : (key.value = '1')
+      } else if (unref(selectType).type == '移动云盘') {
         folderFileIdArr.value.push(item.folderFileId)
         folderFileId.value = item.folderFileId
         key.value === '1' ? (key.value = '2') : (key.value = '1')

@@ -91,10 +91,11 @@ import fileSource from './components/file-source.vue'
 import { validateWebdav, validateEmby } from '@/utils/validate'
 import { useRoute, useRouter } from 'vue-router'
 import { toParse, toStringfy } from '@/pages/mobile/mine/common'
-import { loginUser, get189Folder, getQuarkFolder, get189User, getQuarkUser, getWopanFolder } from '@/utils/common'
+import { loginUser, get189Folder, getQuarkFolder, get189User, getQuarkUser, getWopanFolder, get139Folder } from '@/utils/common'
 import { initLoginParam, login189 } from '@/utils/cloud189/login.js'
 import { wopanLogin } from '@/utils/wopan/login.js'
-import { save189Password, extract189TokenFields } from '@/utils/cloud189/store.js'
+import { login139 } from '@/utils/cloud139/login.js'
+import { save139Password } from '@/utils/cloud139/store.js'
 import { addOperLog } from '@/network/apis'
 import * as CONFIG from '@/utils/config'
 import wilTitle from '@/components/electron/wil-title/index.vue'
@@ -128,6 +129,7 @@ const state = reactive({
   cloud189Loading: false,
   needWopanSms: false,
   wopanLoading: false,
+  cloud139Loading: false,
 })
 const providerLabelMap = computed(() => ({
   WebDAV: 'WebDAV',
@@ -135,6 +137,7 @@ const providerLabelMap = computed(() => ({
   天翼云盘: t('source.tianyiCloudDriveLabel'),
   夸克网盘: t('source.quarkCloudDriveLabel'),
   联通云盘: t('source.unicomCloudDriveLabel'),
+  移动云盘: t('source.cloud139Label'),
 }))
 const getSourceTypeLabel = type => providerLabelMap.value[type] || type
 const dialogTitle = computed(() => {
@@ -287,12 +290,31 @@ const createWopanOptions = () => {
   return opts
 }
 
+//移动云盘：手机号+密码（三步登录链一次完成，无验证码环节）
+const create139Options = () => [
+  {
+    label: t('source.wopanPhone'),
+    prop: 'phone',
+    type: 'input',
+    formItemProps: { placeholder: t('source.cloud139PhonePlaceholder'), type: 'text' },
+    rule: [{ required: true, message: t('source.cloud139PhonePlaceholder') }],
+  },
+  {
+    label: t('source.password'),
+    prop: 'password',
+    type: 'input',
+    formItemProps: { placeholder: t('source.cloud139PasswordPlaceholder'), type: 'password' },
+    rule: [{ required: true, message: t('source.pleaseInputPassword') }],
+  },
+]
+
 const getProviderOptions = provider => {
   if (provider === 'WebDAV') return createWebdavOptions()
   if (provider === 'Emby') return createEmbyOptions()
   if (provider === '天翼云盘') return createTianyiOptions()
   if (provider === '夸克网盘') return createQuarkOptions()
   if (provider === '联通云盘') return createWopanOptions()
+  if (provider === '移动云盘') return create139Options()
   return []
 }
 
@@ -430,6 +452,12 @@ const confirm = () => {
       await confirmWopan(currentDialogMode)
     })
     return
+  } else if (showType.value === '移动云盘') {
+    wil_form.value.confirmCommit().then(async valid => {
+      if (!valid) return
+      await confirm139(currentDialogMode)
+    })
+    return
   }
   cancel()
 }
@@ -475,6 +503,50 @@ const confirmWopan = async currentDialogMode => {
     uni.showToast({ title: e.message || t('source.loginFailed'), icon: 'none' })
   } finally {
     state.wopanLoading = false
+  }
+}
+
+//移动云盘三步登录链：账密 → authorization 落库（失败时提示风控/账密错误）
+const confirm139 = async currentDialogMode => {
+  if (state.cloud139Loading) return
+  const { phone, password } = state.formData
+  state.cloud139Loading = true
+  try {
+    const result = await login139(phone, password)
+    save139Password(phone, phone, password)
+    const cloud139 = sourceList.value.find(i => i.type === '移动云盘')
+    if (currentDialogMode === 'add') {
+      const isHaveData = !sourceList.value.every(item => !item.list.length)
+      const obj = { name: phone, authorization: result.authorization, account: result.account, userDomainId: result.userDomainId }
+      if (!isHaveData) {
+        cloud139.list.push({ ...obj, active: true })
+        uni.setStorageSync('isreload', true)
+      } else {
+        cloud139.list.push(obj)
+      }
+      addOperLog({ title: '登录移动云盘', businessType: 12, operatorType: 2, operUrl: '' })
+    } else if (currentDialogMode === 'edit') {
+      const same = cloud139.list.find(i => i.name === state.editObj.name)
+      Object.assign(same, { name: phone, authorization: result.authorization, account: result.account, userDomainId: result.userDomainId })
+      if (state.editObj.active) {
+        uni.setStorageSync('isreload', true)
+      }
+    }
+    uni.setStorageSync('sourceList', sourceList.value)
+    uni.showToast({ title: t('common.saveSuccess'), icon: 'none' })
+    judgeShow()
+    showDialog.value = false
+    cancel()
+  } catch (e) {
+    const tip =
+      e.code === 'CLOUD139_RISK_CONTROL'
+        ? t('source.cloud139RiskControl')
+        : e.code === 'CLOUD139_AUTH_FAILED'
+          ? t('source.cloud139AuthFailed')
+          : e.message || t('source.loginFailed')
+    uni.showToast({ title: tip, icon: 'none' })
+  } finally {
+    state.cloud139Loading = false
   }
 }
 
@@ -711,6 +783,17 @@ const handleSelect = (item, vitem) => {
               icon: 'none',
             })
           })
+      } else if (item.type == '移动云盘') {
+        await get139Folder({ folderId: 'root' }, vitem)
+          .then(() => {
+            resetSelect(vitem)
+          })
+          .catch(error => {
+            uni.showToast({
+              title: t('source.reloginCloud139'),
+              icon: 'none',
+            })
+          })
       } else if (item.type == 'Emby') {
         resetSelect(vitem)
       }
@@ -743,6 +826,9 @@ const editSource = (item, vitem) => {
   } else if (item.type === '联通云盘') {
     state.needWopanSms = false
     state.options = createWopanOptions()
+    state.formData.phone = vitem.name
+  } else if (item.type === '移动云盘') {
+    state.options = create139Options()
     state.formData.phone = vitem.name
   }
   showDialog.value = true

@@ -28,7 +28,7 @@
 <script>
 import i18n from "@/i18n";
 import { addOperLog } from "@/network/apis";
-import { getWebDAVUrl, get189VideoUrl, loginUser, getQuarkResolutionUrl, getQuarkVideoUrl, getWopanVideoUrl, getFolder, getTvSeason, get189Folder, getQuarkFolder, getWopanFolder } from "@/utils/common";
+import { getWebDAVUrl, get189VideoUrl, loginUser, getQuarkResolutionUrl, getQuarkVideoUrl, getWopanVideoUrl, get139VideoUrl, getFolder, getTvSeason, get189Folder, getQuarkFolder, getWopanFolder, get139Folder } from "@/utils/common";
 import { sortVideoList, filterVideoFormat } from "@/utils/player-common";
 import { calTime, handleSeasonName, generateChineseNumberMapping } from "@/utils/scrape";
 import { IMG_DOMAIN } from "@/utils/config";
@@ -134,6 +134,16 @@ export default {
       } else if (this.selectType.type == "联通云盘") {
         if (this.selectMedia.name) {
           let res = await getWopanVideoUrl(
+            {
+              folderFileId: this.routerParams.folderFileId,
+            },
+            this.selectMedia
+          );
+          return res;
+        }
+      } else if (this.selectType.type == "移动云盘") {
+        if (this.selectMedia.name) {
+          let res = await get139VideoUrl(
             {
               folderFileId: this.routerParams.folderFileId,
             },
@@ -290,6 +300,9 @@ export default {
           this.setQuarkUrl(res, num);
         }
       } else if (this.selectType.type == "联通云盘") {
+        addOperLog({ title: this.config.title.slice(0, 30), businessType: 10, operatorType: 2, operUrl: res.url });
+        this.config.url = res.url;
+      } else if (this.selectType.type == "移动云盘") {
         addOperLog({ title: this.config.title.slice(0, 30), businessType: 10, operatorType: 2, operUrl: res.url });
         this.config.url = res.url;
       }
@@ -483,6 +496,27 @@ export default {
             id: i.fid || i.id,
             name: i.name,
             provider: "WoPan",
+          };
+        });
+      } else if (this.selectType.type == "移动云盘") {
+        try {
+          result = await get139Folder(
+            {
+              folderId: data.wjjId,
+            },
+            this.selectMedia
+          );
+        } catch (error) {
+          this.showRehandleButton = true;
+          return;
+        }
+        result.fileListAO.fileList = filterVideoFormat(result.fileListAO.fileList, "name");
+        //对电视进行排序
+        this.tvList = sortVideoList(result.fileListAO.fileList, "name").map((i) => {
+          return {
+            id: i.id,
+            name: i.name,
+            provider: "Cloud139",
           };
         });
       }

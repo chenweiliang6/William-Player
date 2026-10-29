@@ -44,7 +44,7 @@
 import { onBeforeMount, ref, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDict } from '@/utils/useDict'
-import { loginUser, getFolder, get189Folder, getQuarkFolder, getTvSeason, getMovieTvById } from '@/utils/common'
+import { loginUser, getFolder, get189Folder, getQuarkFolder, get139Folder, getTvSeason, getMovieTvById } from '@/utils/common'
 import { parseTime, calTime, handleSecond, handleSeasonName, extractSeasonNumber, generateChineseNumberMapping } from '@/utils/scrape'
 import { onShow, onLoad } from '@dcloudio/uni-app'
 import editIcon from '@/static/edit_icon.png'
@@ -185,6 +185,7 @@ const getSourceLabel = provider => {
     '189CloudPC': t('source.tianyiCloudDriveLabel'),
     Quark: t('source.quarkCloudDriveLabel'),
     WoPan: t('source.unicomCloudDrive'),
+    Cloud139: t('source.cloud139Label'),
     unknown: t('common.unknown'),
   }
   return mapping[provider] || provider
@@ -356,6 +357,53 @@ const handleTv = async (seasonData1 = null) => {
       })
 
     // imgData.value.runtime = `共${res1.episodes.length}集（库中有${result.data.list?.length || 0}集）`;
+  } else if (selectType.value.type == '移动云盘') {
+    try {
+      result = await get139Folder(
+        {
+          folderId: activeSeason.value.folderFileId,
+        },
+        selectMedia.value
+      )
+    } catch (error) {
+      showRehandleButton.value = true
+      return
+    }
+    result.fileListAO.fileList = result.fileListAO.fileList.filter(h => {
+      return videoFormat.some(v => h.name.includes(v))
+    })
+    //对电视进行排序
+    tvList.value = result.fileListAO.fileList
+      .sort((a, b) => {
+        const regex = /S\d{2}E\d{2}/
+        const regex1 = /\d+/
+        if (a.name.match(regex) && b.name.match(regex)) {
+          let aName = a.name.match(regex)[0]
+          let bName = b.name.match(regex)[0]
+          const numA = parseInt(aName.slice(-2), 10)
+          const numB = parseInt(bName.slice(-2), 10)
+          a.ji = numA
+          b.ji = numB
+          return numA - numB
+        } else if (a.name.match(regex1) && b.name.match(regex1)) {
+          let aName = a.name.match(regex1)[0]
+          let bName = b.name.match(regex1)[0]
+          const numA = parseInt(aName.slice(-2), 10)
+          const numB = parseInt(bName.slice(-2), 10)
+          a.ji = numA
+          b.ji = numB
+          return numA - numB
+        }
+        return a - b
+      })
+      .map(i => {
+        return {
+          id: i.id,
+          name: i.name,
+          ji: i.ji,
+          provider: 'Cloud139',
+        }
+      })
   }
   let res1 = {}
   if (!seasonData1) {

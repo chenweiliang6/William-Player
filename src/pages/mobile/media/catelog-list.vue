@@ -35,7 +35,7 @@ import wilList from '@/components/mobile/wil-list/index.vue'
 import Folder from '@/static/folder.png'
 import videoPlayer from '@/static/video-player.png'
 import photoIcon from '@/static/photo-icon.png'
-import { get189Folder, getQuarkFolder, getWopanFolder, getWebDAVUrl, get189DownloadUrl, getQuarkVideoUrl, getWopanVideoUrl } from '@/utils/common.js'
+import { get189Folder, getQuarkFolder, getWopanFolder, get139Folder, getWebDAVUrl, get189DownloadUrl, getQuarkVideoUrl, getWopanVideoUrl, get139VideoUrl } from '@/utils/common.js'
 import { onShow, onLoad } from '@dcloudio/uni-app'
 import { useThemeNavbar } from '@/hooks/useThemeNavbar'
 import { useThemeClass } from '@/hooks/useThemeClass'
@@ -143,6 +143,18 @@ const getFileList = async data => {
       v.folderFileId = v.id
     })
     return { data: { content: [...res.fileListAO.folderList, ...res.fileListAO.fileList], total: res.fileListAO.count } }
+  } else if (selectType.value.type == '移动云盘') {
+    let res = await get139Folder({ folderId: routerParams.value.folderFileId }, selectMedia.value)
+    res.fileListAO.fileList.forEach(v => {
+      if (v.thumbUrl) v.thumb = v.thumbUrl
+      v.type = 0
+      v.folderFileId = v.id
+    })
+    res.fileListAO.folderList.forEach(v => {
+      v.type = 1
+      v.folderFileId = v.id
+    })
+    return { data: { content: [...res.fileListAO.folderList, ...res.fileListAO.fileList], total: res.fileListAO.count } }
   }
 }
 
@@ -179,6 +191,10 @@ const clickCell = async item => {
       uni.navigateTo({
         url: `/pages/mobile/media/catelog-list?path=${encodeURIComponent(path + '/' + item.name)}&folderFileId=${item.folderFileId}`,
       })
+    } else if (selectType.value.type == '移动云盘') {
+      uni.navigateTo({
+        url: `/pages/mobile/media/catelog-list?path=${encodeURIComponent(path + '/' + item.name)}&folderFileId=${item.folderFileId}`,
+      })
     }
   } else {
     let videoFormat = ['mp4', 'mkv', 'm2ts', 'avi', 'mov', 'ts', 'm3u8', 'iso']
@@ -208,6 +224,12 @@ const clickCell = async item => {
         })
       } else if (selectType.value.type == '联通云盘') {
         let res = await getWopanVideoUrl({ folderFileId: item.folderFileId }, selectMedia.value)
+        uni.previewImage({
+          urls: [res.url],
+          indicator: 'none',
+        })
+      } else if (selectType.value.type == '移动云盘') {
+        let res = await get139VideoUrl({ folderFileId: item.folderFileId }, selectMedia.value)
         uni.previewImage({
           urls: [res.url],
           indicator: 'none',

@@ -283,6 +283,15 @@ const getWopanFolder = (data, credential) => listWopanFiles(data.folderId, crede
 //联通云盘获取视频播放/下载链接
 const getWopanVideoUrl = (data, credential) => getWopanDownloadUrl(data.folderFileId, credential)
 
+//移动云盘
+import { list139Files, get139DownloadUrl } from '@/utils/cloud139/data.js'
+
+//移动云盘获取文件列表（fileListAO 结构对齐天翼云盘，上层零改动）
+const get139Folder = (data, credential) => list139Files(data.folderId, credential)
+
+//移动云盘获取视频播放/下载链接
+const get139VideoUrl = (data, credential) => get139DownloadUrl(data.folderFileId, credential)
+
 //获取第几季的详情
 const getTvSeason = data => getTvSeasonDetail(data)
 //通过tmdb接口获取更详细的信息
@@ -401,6 +410,8 @@ export {
   getWopanFolder,
   getWopanVideoUrl,
   getWopanUser,
+  get139Folder,
+  get139VideoUrl,
   getTvSeason,
   getMovieTvById,
   getCutContent,
