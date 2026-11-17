@@ -5,11 +5,11 @@
     </div>
     <div class="hxList-list">
       <tv-scroll class="hxList-list-scroll" :scroll-x="true" style="width: 100%" :enhanced="true" :showScrollbar="false" :scrollIntoView="scrollIntoView">
-        <div class="hxList-list-movie__item" v-for="(item, index) in listData1" :id="'name' + (index + 1)" :key="item.name" @click="toVideoDetail(item)">
+        <div class="hxList-list-movie__item" v-for="(item, index) in listData1" :id="'name' + (index + 1)" :key="item.workKey || (item.name + (item.type || ''))" @click="toVideoDetail(item)">
           <template v-if="item.isMore">
             <div :class="['hxList-list-movie__more-img', tabIndex == index ? 'hxList-list-movie__more-active' : '']">
               <div class="img-icon">
-                <image :src="tabIndex == index ? icIntoblack : icIntowhite"></image>
+                <wil-icon name="arrow-right" :custom-color="tabIndex == index ? '#000000' : '#ffffff'"></wil-icon>
               </div>
               <span class="img-all">{{ t('video.viewAll') }}</span>
               <span class="img-number">{{ t('video.totalCount', { count: props.listData.length }) }}</span>
@@ -18,16 +18,24 @@
             <span class="hxList-list-movie__item-time" style="opacity: 0">{{ t('common.none') }}</span>
           </template>
           <template v-else>
-            <image
-              :src="setEmptyImg(item.poster)"
-              mode="aspectFill"
-              :class="[
-                props.mediaType == 'movie' ? 'hxList-list-movie__img-movie' : 'hxList-list-movie__img-tv',
-                tabIndex == index ? 'hxList-list-movie__img-active' : 'hxList-list-movie__item-img',
-              ]">
-            </image>
+            <!-- 海报容器：只为承载右下角评分徽标。
+                 三个 __img-* class 必须继续挂在 <image> 上——
+                 onShow 里的滚动定位用 select('.hxList-list-movie__img-active,
+                 .hxList-list-movie__img-movie, .hxList-list-movie__img-tv') 取海报，
+                 挂到容器上会让那三个选择器全部落空。 -->
+            <div class="hxList-list-movie__poster">
+              <image
+                :src="setEmptyImg(item.poster)"
+                mode="aspectFill"
+                :class="[
+                  props.mediaType == 'movie' ? 'hxList-list-movie__img-movie' : 'hxList-list-movie__img-tv',
+                  tabIndex == index ? 'hxList-list-movie__img-active' : 'hxList-list-movie__item-img',
+                ]">
+              </image>
+              <span v-if="showVote(item)" class="hxList-list-movie__vote">{{ voteText(item) }}</span>
+            </div>
             <span class="hxList-list-movie__item-name">{{ removeExtension(item.name) }}</span>
-            <span class="hxList-list-movie__item-time">{{ item.releaseTime || t('common.none') }}</span>
+            <span class="hxList-list-movie__item-time">{{ cardSubText(item, t) }}</span>
           </template>
         </div>
       </tv-scroll>
@@ -40,22 +48,32 @@ import { useI18n } from 'vue-i18n'
 import posterEmpty from '@/static/poster-empty.png'
 import { onShow } from '@dcloudio/uni-app'
 import { handleSeasonName, throttle, debounce } from '@/utils/scrape'
+import { showVote, voteText, cardSubText } from '@/utils/card-meta'
 import * as CONFIG from '@/utils/config'
 import tvScroll from '@/components/tv/tv-scroll/index.vue'
-import icIntoblack from '@/static/ic-intoblack.png'
-import icIntowhite from '@/static/ic-intowhite.png'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 
 const { t } = useI18n()
 
 const props = defineProps({
   title: { type: String, default: '' },
+  // 媒体类型（movie/tv），详情页跳转需要；展示分类由 title/category 决定
   mediaType: { type: String, default: 'movie' },
+  // 展示分类（movie/tv/anime/variety/documentary），「查看全部」带参用
+  category: { type: String, default: '' },
   number: { type: String, default: '0' },
   listData: { type: Array, default: [] },
+  // 库内容版本号。刮削边刮边显示时列表会原地增长，
+  // listData1 是 props 的快照，必须靠它触发重建。
+  revision: { type: Number, default: 0 },
   isFocus: { type: Boolean, default: false },
   focusModel: { type: String, default: '' },
   historyPlay: { type: Array, default: [] },
   offsetTop: { type: Number, default: 0 },
+  // 上下邻居由父组件按焦点序列算好传入。
+  // 原先这里写死 hxMovie/hxTv 互为邻居，分类变成 5 个后无法维护。
+  prevFocus: { type: String, default: '' },
+  nextFocus: { type: String, default: '' },
 })
 
 const emits = defineEmits(['setFocus'])
@@ -66,42 +84,17 @@ const scrollIntoView = ref('')
 
 const scrollTop = ref(0)
 
-const listData1 = ref(JSON.parse(JSON.stringify(props.listData)).slice(0, 10))
-listData1.value.push({ isMore: true })
-listData1.value.forEach(item => {
-  item.loadImg = true
-})
+// **先 slice 再浅拷贝**。早期是整表 JSON 往返后再截断，分区上万条时
+// 每次重建都要全量序列化一遍；边刮边显示后重建频率提高，必须改掉。
+const takeTop = list => [
+  ...(list || []).slice(0, 10).map(item => ({ ...item, loadImg: true })),
+  { isMore: true },
+]
+const listData1 = ref(takeTop(props.listData))
 
-//获取上下的组件
-const getUpDown = direction => {
-  if (props.focusModel === 'hxMovie') {
-    if (direction === 'up') {
-      if (props.historyPlay.length) {
-        return 'recentPlayed'
-      }
-      return 'starRecommend'
-    } else {
-      let localMovieTvData = uni.getStorageSync('localMovieTvData')
-      if (localMovieTvData?.tv?.length) {
-        return 'hxTv'
-      }
-      return 'videoClassify'
-    }
-  } else if (props.focusModel === 'hxTv') {
-    if (direction === 'up') {
-      let localMovieTvData = uni.getStorageSync('localMovieTvData')
-      if (localMovieTvData?.movie?.length) {
-        return 'hxMovie'
-      }
-      if (props.historyPlay.length) {
-        return 'recentPlayed'
-      }
-      return 'starRecommend'
-    } else {
-      return 'videoClassify'
-    }
-  }
-}
+// 上下邻居由父组件按当前可见的分类分区序列算好传入。
+// 空分类不渲染，邻居会自动跨过去，不会出现「按一下没反应」。
+const getUpDown = direction => (direction === 'up' ? props.prevFocus : props.nextFocus)
 
 const removeExtension = filename => {
   let name = handleSeasonName(filename, true)
@@ -152,17 +145,29 @@ const setScrollIntoView = debounce(() => {
   }
 }, 300)
 
+// 详情页只认 movie/tv。分类页签可能是 anime/variety/documentary，
+// 必须从条目自带 type（'1'=剧集 / '2'=电影）推导真实媒体类型。
+const getItemMediaType = item => {
+  if (item?.type === '1' || item?.type === 1) return 'tv'
+  if (item?.type === '2' || item?.type === 2) return 'movie'
+  if (props.category === 'movie') return 'movie'
+  if (['tv', 'anime', 'variety', 'documentary'].includes(props.category)) return 'tv'
+  return props.mediaType
+}
+
 const toVideoDetail = item => {
   uni.navigateTo({
-    url: `/pages/tv/video/video-detail?path=${item.path}&name=${handleSeasonName(item.name, true)}&type=${props.mediaType}&source=${JSON.stringify(
+    url: `/pages/tv/video/video-detail?path=${item.path}&name=${handleSeasonName(item.name, true)}&type=${getItemMediaType(item)}&source=${JSON.stringify(
       item.source
-    )}&movieTvId=${item.movieTvId}`,
+    )}&movieTvId=${item.movieTvId}&workKey=${encodeURIComponent(item.workKey || '')}`,
   })
 }
 
 const toVideoAll = () => {
+  // category 必须带上：useVideoAll 优先用它定位分类，
+  // 只传已国际化的 title 在部分语言下会落到 undefined 而得到空列表
   uni.navigateTo({
-    url: `/pages/tv/video/video-all?title=${encodeURIComponent(props.title)}&mediaType=${props.mediaType}`,
+    url: `/pages/tv/video/video-all?title=${encodeURIComponent(props.title)}&category=${props.category}&mediaType=${props.mediaType}`,
   })
 }
 
@@ -182,44 +187,33 @@ const setItemWidth = () => {
 }
 setItemWidth()
 
-onShow(() => {
+const rebuild = () => {
   nextTick(() => {
-    listData1.value = JSON.parse(JSON.stringify(props.listData)).slice(0, 10)
-    listData1.value.push({ isMore: true })
-    listData1.value.forEach(item => {
-      item.loadImg = true
-    })
-  })
-  setTimeout(() => {
-    let windowHeight = uni.getSystemInfoSync().windowHeight
-    const query = uni.createSelectorQuery()
-    if (props.mediaType == 'movie') {
-      query
-        .select('.hxList-list-movie__img-movie')
-        .fields(
-          {
-            rect: true,
-            size: true,
-          },
-          res => {
-            scrollTop.value = props.offsetTop + res.top - windowHeight / 2 + res.height / 2 < 0 ? 0 : props.offsetTop + res.top - windowHeight / 2 + res.height / 2
-          }
-        )
-        .exec()
-    } else if (props.mediaType == 'tv') {
-      query
-        .select('.hxList-list-movie__img-tv')
-        .fields(
-          {
-            rect: true,
-            size: true,
-          },
-          res => {
-            scrollTop.value = props.offsetTop + res.top - windowHeight / 2 + res.height / 2 < 0 ? 0 : props.offsetTop + res.top - windowHeight / 2 + res.height / 2
-          }
-        )
-        .exec()
+    listData1.value = takeTop(props.listData)
+    // 列表变短时焦点可能越界（指向已不存在的下标），复位到「更多」占位上。
+    // 边刮边显示会让列表在用户浏览期间增长/重排，这一条必须补。
+    if (tabIndex.value > listData1.value.length - 1) {
+      tabIndex.value = -1
     }
+  })
+}
+
+onShow(() => {
+  rebuild()
+  setTimeout(() => {
+    const windowHeight = uni.getSystemInfoSync().windowHeight
+    const query = uni.createSelectorQuery()
+    // 用两个 select 并集取第一个海报中心，避免按 mediaType 分支——
+    // 分类扩到动漫/综艺/纪录片后，原先只认 movie/tv 的两个分支都不命中，
+    // 会导致 scrollTop 恒为 0、整页滚动定位完全失效。
+    query
+      .select('.hxList-list-movie__img-active, .hxList-list-movie__img-movie, .hxList-list-movie__img-tv')
+      .fields({ rect: true, size: true }, res => {
+        if (!res) return
+        const center = props.offsetTop + res.top - windowHeight / 2 + res.height / 2
+        scrollTop.value = center < 0 ? 0 : center
+      })
+      .exec()
   }, 0)
 })
 
@@ -234,6 +228,12 @@ watch(
   }
 )
 
+// 刮削边刮边显示：库增长时父组件递增 revision，这里重建快照让新卡片出现。
+watch(
+  () => [props.revision, props.listData],
+  rebuild,
+)
+
 const getScrollTop = () => {
   return scrollTop.value
 }
@@ -244,16 +244,6 @@ defineExpose({
 })
 </script>
 <style lang="scss" scoped>
-@keyframes opacityIn {
-  0% {
-    opacity: 0;
-  }
-
-  100% {
-    opacity: 1;
-  }
-}
-
 .hxList {
   width: 100%;
   margin-bottom: 50rpx;
@@ -318,6 +308,29 @@ defineExpose({
             height: auto;
           }
 
+          // 海报容器：给评分徽标提供定位上下文。
+          // 必须写完整类名——用 `&-poster` 会接续上面的选择器组合。
+          .hxList-list-movie__poster {
+            position: relative;
+            width: 100%;
+          }
+
+          // 徽标用 px 而不是 rpx：TV 端 rpxCalcMaxDeviceWidth 是 700，
+          // 34rpx 会被缩到很小、看不清。这里的数值按 1080p 电视的观感定。
+          .hxList-list-movie__vote {
+            position: absolute;
+            right: 10px;
+            bottom: 10px;
+            padding: 0 6px;
+            height: 22px;
+            line-height: 22px;
+            border-radius: 5px;
+            background: rgba(0, 0, 0, 0.6);
+            color: #ffc93c;
+            font-size: 14px;
+            font-weight: bold;
+          }
+
           .hxList-list-movie__img-active {
             border: 6rpx solid #ff6701;
           }
@@ -341,9 +354,8 @@ defineExpose({
               align-items: center;
               justify-content: center;
 
-              image {
-                width: 30rpx;
-                height: 30rpx;
+              .iconfont {
+                font-size: 30rpx;
               }
             }
 
@@ -392,13 +404,6 @@ defineExpose({
           }
         }
 
-        .is-move {
-          transition: transform 0.3s ease;
-        }
-
-        .is-new {
-          animation: opacityIn 0.3s ease;
-        }
       }
     }
   }

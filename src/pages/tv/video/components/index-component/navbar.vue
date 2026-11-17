@@ -2,7 +2,7 @@
   <div class="tv-navbar">
     <div class="tv-navbar-left">
       <div :class="['tv-navbar-left__search', tabIndex === 0 ? 'search-active' : '']">
-        <image src="@/static/search-white.png"></image>
+        <wil-icon name="sousuo" custom-color="#ffffff"></wil-icon>
         <span>{{ t('video.search') }}</span>
       </div>
       <div class="tv-navbar-left__tabs">
@@ -13,10 +13,10 @@
     </div>
     <div class="tv-navbar-right">
       <div :class="['tv-navbar-right__icon', 'tv-navbar-right__refresh', tabIndex === 3 ? 'tv-navbar-right__icon-active' : '']" @click="showProgress">
-        <image :class="['tv-navbar-right__icon-refresh', loading ? 'refresh-rotate' : '']" src="@/static/xuanzhuan-icon.png"> </image>
+        <wil-icon name="shuaxin" custom-color="#ffffff" :class="['tv-navbar-right__icon-refresh', loading ? 'refresh-rotate' : '']"></wil-icon>
       </div>
       <div :class="['tv-navbar-right__icon', tabIndex === 4 ? 'tv-navbar-right__icon-active' : '']" @click="openSetting">
-        <image class="tv-navbar-right__icon-setting" src="@/static/chilun-icon.png"></image>
+        <wil-icon name="shezhi" custom-color="#ffffff" class="tv-navbar-right__icon-setting"></wil-icon>
       </div>
       <span>{{ nowTime }}</span>
     </div>
@@ -30,6 +30,7 @@
         <div class="popover-title">
           <div class="popover-title-left">
             <span>{{ popoverData.title }}</span>
+            <span class="popover-title-left__button" v-if="loading" @click="toCancel">{{ t('video.cancelScan') }}</span>
           </div>
         </div>
         <div class="popover-list">
@@ -49,6 +50,8 @@ import { ref, watch, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import dayjs from 'dayjs'
 import { onUnload } from '@dcloudio/uni-app'
+import { findActiveSource } from '@/utils/tools'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 
 const { t } = useI18n()
 
@@ -59,7 +62,7 @@ const props = defineProps({
   loading: { type: Boolean, default: false },
   isEmpty: { type: Boolean, default: false },
 })
-const emits = defineEmits(['setFocus', 'changeSetting', 'refresh'])
+const emits = defineEmits(['setFocus', 'changeSetting', 'refresh', 'pause'])
 
 const tabsArr = ref([t('video.movie'), t('live.live')])
 const activeTab = ref(t('video.movie'))
@@ -114,7 +117,7 @@ const evtMove = keyCode => {
 const judgeSelect = () => {
   let sourceList = uni.getStorageSync('sourceList')
   selectType.value = sourceList.find(item => {
-    let select = item.list.find(i => i.active)
+    let select = findActiveSource(item.list)
     if (select) {
       selectMedia.value = select
       return true
@@ -130,8 +133,16 @@ const showProgress = () => {
   timer1.value = null
   clearTimeout(timer2.value)
   timer2.value = null
+  // 刮削进行中：直接展开弹层，取消按钮此时一定可见
   if (loading.value) {
     showPopover.value = true
+    isShowPopover.value = true
+    return
+  }
+  judgeSelect()
+  // 没有启用的源时 selectType 为 undefined，继续走下去会在下面 selectType.value.type 抛错
+  if (!selectType.value?.type) {
+    uni.showToast({ title: t('video.noActiveSource'), icon: 'none' })
     return
   }
   popoverData.value.title = t('video.scanning')
@@ -142,22 +153,18 @@ const showProgress = () => {
   ]
   showPopover.value = true
   isShowPopover.value = true
-  judgeSelect()
   if (selectType.value.type == 'Emby') {
     showPopover.value = false
     isShowPopover.value = false
   }
   emits('refresh')
-  timer1.value = setTimeout(() => {
-    //刮削时间到了60s那就自动暂停
-    isShowPopover.value = false
-    setTimeout(() => {
-      showPopover.value = false
-    }, 300)
-    clearTimeout(timer1.value)
-    timer1.value = null
-    emits('pause')
-  }, 60000)
+  // 原先这里是 60 秒后自动 emits('pause')，但父组件没绑定 @pause，
+  // 而且自动「暂停」在语义上也不对 —— 取消应该由用户决定。
+}
+
+//取消本次刮削
+const toCancel = () => {
+  emits('pause')
 }
 
 const openSetting = () => {
@@ -215,7 +222,16 @@ watch(
   val => {
     loading.value = val
     if (!val) {
-      popoverData.value.title = t('video.completedSyncVideos', { count: props.refreshData.success || 0 })
+      // 取消结束时，标题要说明是哪种结束，而不是一律报「已完成」
+      const reason = props.refreshData?.cancelReason
+      if (reason === 'user') {
+        // 取消后已刮到的批次会保留，文案要说清楚
+        popoverData.value.title = t('video.scanCancelledKeepPartial')
+      } else if (reason === 'tmdb') {
+        popoverData.value.title = t('video.tmdbUnavailable')
+      } else {
+        popoverData.value.title = t('video.scanCompleted')
+      }
       timer2.value = setTimeout(() => {
         isShowPopover.value = false
         setTimeout(() => {
@@ -303,9 +319,8 @@ defineExpose({
       padding: 20rpx 30rpx;
       border-radius: 40rpx;
 
-      image {
-        width: 35rpx;
-        height: 35rpx;
+      .iconfont {
+        font-size: 35rpx;
       }
 
       span {
@@ -368,8 +383,7 @@ defineExpose({
       }
 
       .tv-navbar-right__icon-refresh {
-        width: 50rpx;
-        height: 50rpx;
+        font-size: 50rpx;
       }
 
       .refresh-rotate {
@@ -377,8 +391,7 @@ defineExpose({
       }
 
       .tv-navbar-right__icon-setting {
-        width: 50rpx;
-        height: 50rpx;
+        font-size: 50rpx;
       }
     }
 

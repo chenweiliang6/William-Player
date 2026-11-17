@@ -1,18 +1,16 @@
 <template>
   <tv-page @keyCodeClick="keyCodeClick">
-    <div class="video-detail" :style="{ backgroundImage: `url(${imgData.img})` }">
-      <div
-        class="video-detail-left"
-        :style="{ background: showRightPopup ? 'rgba(0,0,0,0.4)' : 'linear-gradient(to right, black 0%, rgba(0, 0, 0, 0.7) 80%, rgba(0, 0, 0, 0) 100%)' }"
-      >
+    <video-detail-skeleton v-if="!hasDetail" />
+    <div v-else class="video-detail" :style="{ backgroundImage: `url(${imgData.img})`, ...posterVars }">
+      <div class="video-detail-left" :style="{ background: leftBg }">
         <div class="left-title">{{ imgData.title }}</div>
         <div class="left-info">
           <div class="left-info-date">
-            <image src="@/static/date-iconwhite.png"></image>
+            <wil-icon name="rili" custom-color="#ffffff"></wil-icon>
             <span>{{ imgData.releaseTime }}</span>
           </div>
           <div class="left-info-score">
-            <image src="@/static/star-fill.png"></image>
+            <wil-icon name="shoucang" custom-color="#f4bc22"></wil-icon>
             <span>{{ imgData.score }}</span>
           </div>
           <div class="left-info-runtime">{{ imgData.runtime }}</div>
@@ -41,11 +39,11 @@
 </template>
 
 <script setup>
-import { onBeforeMount, ref, nextTick } from 'vue'
+import { onBeforeMount, ref, computed, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDict } from '@/utils/useDict'
 import { loginUser, getFolder, get189Folder, getQuarkFolder, get139Folder, getTvSeason, getMovieTvById } from '@/utils/common'
-import { parseTime, calTime, handleSecond, handleSeasonName, extractSeasonNumber, generateChineseNumberMapping } from '@/utils/scrape'
+import { parseTime, calTime, handleSecond, handleSeasonName, extractSeasonNumber, generateChineseNumberMapping, getMovieTvData, findInView } from '@/utils/scrape'
 import { onShow, onLoad } from '@dcloudio/uni-app'
 import editIcon from '@/static/edit_icon.png'
 import timeIcon from '@/static/time_icon.png'
@@ -54,10 +52,15 @@ import { toStringfy } from '@/pages/mobile/mine/common'
 import * as CONFIG from '@/utils/config'
 import operationButton from './components/detail-component/operation-button.vue'
 import tvPage from '@/components/tv/tv-page/index.vue'
+import { useDominantColor } from '@/hooks/useDominantColor'
+import { posterPalette } from '@/utils/dominantColor'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 import cloudList from './components/detail-component/cloud-list.vue'
 import seasonList from './components/detail-component/season-list.vue'
 import tvListd from './components/detail-component/tv-list.vue'
 import actorList from './components/detail-component/actor-list.vue'
+import VideoDetailSkeleton from '@/components/common/video-detail-skeleton.vue'
+import { findActiveSource } from '@/utils/tools'
 
 const { t } = useI18n()
 const { getUntokenDict } = useDict()
@@ -72,6 +75,9 @@ const pickerColumns = ref([[], []])
 
 const imgData = ref({}) //图片内的信息
 const overview = ref('') //剧情简介
+// 详情数据未就绪时展示骨架屏，避免进入页面时长时间空白
+const detailLoading = ref(true)
+const hasDetail = computed(() => !detailLoading.value || !!imgData.value.title)
 
 const sourceList = ref([])
 const selectSource = ref({}) //切换选中的来源
@@ -108,18 +114,45 @@ const season_list = ref(null)
 const tv_list = ref(null)
 const showRightPopup = ref(false)
 
+// 左栏（文字区）用海报主色纯色铺底，背景大图保持原样清晰显示
+const { rawColor: tvRawColor } = useDominantColor(computed(() => imgData.value.img))
+const palette = computed(() => posterPalette(tvRawColor.value))
+const leftBg = computed(() => {
+  if (showRightPopup.value) return 'rgba(0,0,0,0.4)'
+  return palette.value?.bg || 'rgba(0, 0, 0, 0.75)'
+})
+const posterVars = computed(() => {
+  const p = palette.value
+  return p
+    ? {
+        '--content-text': p.text,
+        '--content-text-secondary': p.textSecondary,
+        '--content-text-tertiary': p.textTertiary,
+        '--content-border': p.border,
+        '--content-surface': p.surface,
+        '--content-surface-strong': p.surfaceStrong,
+      }
+    : {}
+})
+
 const toSelect = item => {
   if (item.action == 'manualEdit') {
     showPopover.value = false
     //获取当前源里面的最大季数
-    const maxSeasonArrLength = Math.max(...sourceList.value.map(v => v.seasonArr.length))
+    const maxSeasonArrLength = Math.max(...sourceList.value.map(v => (v.seasonArr || []).length))
+    const query = encodeURIComponent(imgData.value.title || routerParams.value.name || '')
     uni.navigateTo({
-      url: `/pages/tv/video/search-match?type=${routerParams.value.type}&maxSeasonLength=${maxSeasonArrLength}`,
+      url: `/pages/tv/video/search-match?type=${routerParams.value.type}&maxSeasonLength=${maxSeasonArrLength}&workKey=${encodeURIComponent(routerParams.value.workKey || '')}&query=${query}`,
     })
   } else if (item.action == 'skipIntro') {
-    let localMovieTvData = uni.getStorageSync('localMovieTvData')
-    let nowTv = localMovieTvData.tv.find(i => i.movieTvId == routerParams.value.movieTvId)
-    if (nowTv.openingTime) {
+    let localMovieTvData = getMovieTvData()
+    // 按类型 + id 精确定位；查不到当作未设置，避免 undefined 取属性抛错
+    let nowTv = findInView(localMovieTvData, {
+      mediaType: 'tv',
+      tmdbId: routerParams.value.movieTvId,
+      path: routerParams.value.path,
+    })
+    if (nowTv?.openingTime) {
       const minutes = String(Math.floor(nowTv.openingTime / 60)) // 取整分钟数
       const remainingSeconds = String(nowTv.openingTime % 60) // 剩余秒数
       pickerVal.value = [minutes, remainingSeconds]
@@ -141,9 +174,13 @@ const toSelect = item => {
     pickerColumns.value[1] = arr2
     showTimePicker.value = true
   } else if (item.action == 'skipOutro') {
-    let localMovieTvData = uni.getStorageSync('localMovieTvData')
-    let nowTv = localMovieTvData.tv.find(i => i.movieTvId == routerParams.value.movieTvId)
-    if (nowTv.endTime) {
+    let localMovieTvData = getMovieTvData()
+    let nowTv = findInView(localMovieTvData, {
+      mediaType: 'tv',
+      tmdbId: routerParams.value.movieTvId,
+      path: routerParams.value.path,
+    })
+    if (nowTv?.endTime) {
       const minutes = String(Math.floor(nowTv.endTime / 60)) // 取整分钟数
       const remainingSeconds = String(nowTv.endTime % 60) // 剩余秒数
       pickerVal.value = [minutes, remainingSeconds]
@@ -169,14 +206,23 @@ const toSelect = item => {
 
 const confirmPicker = ({ selectedValue, selectedOptions }) => {
   let time = Number(selectedValue[0]) * 60 + Number(selectedValue[1])
-  let localMovieTvData = uni.getStorageSync('localMovieTvData')
-  let nowTv = localMovieTvData.tv.find(i => i.movieTvId == routerParams.value.movieTvId)
+  let localMovieTvData = getMovieTvData()
+  let nowTv = findInView(localMovieTvData, {
+    mediaType: 'tv',
+    tmdbId: routerParams.value.movieTvId,
+    path: routerParams.value.path,
+  })
+  // 查不到目标条目时不写库，只收起选择器
+  if (!nowTv) {
+    showTimePicker.value = false
+    return
+  }
   if (pickerAction.value == 'skipIntro') {
     nowTv.openingTime = time
   } else if (pickerAction.value == 'skipOutro') {
     nowTv.endTime = time
   }
-  uni.setStorageSync('localMovieTvData', localMovieTvData)
+  setMovieTvData(localMovieTvData)
   showTimePicker.value = false
 }
 
@@ -213,10 +259,16 @@ const keyCodeClick = keyCode => {
 //处理电视的详情和剧集等
 const handleTv = async (seasonData1 = null) => {
   showRehandleButton.value = false
-  let season = ''
-  season = activeSeason.value.season
-  if (localMovieTvData.value.tv) {
-    season = localMovieTvData.value.tv.find(i => i.movieTvId == routerParams.value.movieTvId).season
+  let season = activeSeason.value.season
+  // 首次进入时 localMovieTvData 尚未赋值，旧写法命中 `if (...tv)` 后
+  // `.find(...)` 返回 undefined 再取 .season 会抛错。改走 helper 并判空。
+  const hit = findInView(localMovieTvData.value, {
+    mediaType: 'tv',
+    tmdbId: routerParams.value.movieTvId,
+    path: routerParams.value.path,
+  })
+  if (hit?.season) {
+    season = hit.season
     season = season != '1' ? season : activeSeason.value.season
   } else {
     season = extractSeasonNumber(imgData.value.title)
@@ -408,7 +460,14 @@ const handleTv = async (seasonData1 = null) => {
   let res1 = {}
   if (!seasonData1) {
     if (routerParams.value.movieTvId) {
-      res1 = await getTvSeason({ movieTvId: routerParams.value.movieTvId, season: season })
+      // 季数据同样可能失败（断网/无效 id），失败时留空继续，不要让整页崩
+      try {
+        res1 = await getTvSeason({ movieTvId: routerParams.value.movieTvId, season: season })
+      } catch (e) {
+        console.warn('[tv/video-detail] 获取季数据失败:', e?.message)
+        res1 = {}
+      }
+      if (!res1 || res1.status_code) res1 = {}
     }
   } else {
     res1 = seasonData1
@@ -453,6 +512,7 @@ const handleTv = async (seasonData1 = null) => {
 const getMovieTvDetail = async () => {
   if (!routerParams.value.movieTvId) {
     imgData.value.title = routerParams.value.name
+    detailLoading.value = false
     return false
   }
   if (routerParams.value.type == 'tv') {
@@ -462,12 +522,27 @@ const getMovieTvDetail = async () => {
       imgData.value.title = routerParams.value.name
     }
   }
-  let res = await getMovieTvById(
-    {
-      movieTvId: routerParams.value.movieTvId,
-    },
-    routerParams.value.type
-  )
+  // TMDB 失败不抛异常而是返回错误体，且断网会抛，两种都要兜住。
+  // 兜不住的话 res.vote_average.toFixed 会直接崩掉整个详情页。
+  let res
+  try {
+    res = await getMovieTvById(
+      {
+        movieTvId: routerParams.value.movieTvId,
+      },
+      routerParams.value.type
+    )
+  } catch (e) {
+    console.warn('[tv/video-detail] 获取 TMDB 详情失败:', e?.message)
+    detailLoading.value = false
+    return false
+  }
+  if (!res || res.status_code || !res.id) {
+    console.warn('[tv/video-detail] TMDB 详情无效:', res?.status_message || res)
+    detailLoading.value = false
+    return false
+  }
+  detailLoading.value = false
   overview.value = res.overview
   if (routerParams.value.type == 'movie') {
     imgData.value = {
@@ -588,13 +663,15 @@ const clickPlayButton = () => {
       return
     }
     uni.setStorageSync('tvList', tvList.value)
-    let localMovieTvData = uni.getStorageSync('localMovieTvData')
-    let nowTv = {}
-    if (routerParams.value.movieTvId) {
-      nowTv = localMovieTvData.tv.find(i => i.movieTvId == routerParams.value.movieTvId)
-    } else {
-      nowTv = localMovieTvData.tv.find(i => i.path == routerParams.value.path)
-    }
+    let localMovieTvData = getMovieTvData()
+    // 初值为 {} 而非 undefined：后续 `nowTv.openingTime >= 0` 直接取属性，
+    // .find 未命中时若是 undefined 会抛错。空对象上取属性得到 undefined，
+    // 与 `>= 0` 比较为 false，语义正确。
+    let nowTv = findInView(localMovieTvData, {
+      mediaType: 'tv',
+      tmdbId: routerParams.value.movieTvId,
+      path: routerParams.value.path,
+    }) || {}
     let history = historyPlay.value?.find(i => i.titlePlay == imgData.value.title)
     if (history && activeSeason.value.path + '/' + history.name == '/' + history.path) {
       let openEndTime = {}
@@ -657,13 +734,12 @@ const clickPlayButton = () => {
 //播放电视
 const toPlayVideo = (item, index) => {
   uni.setStorageSync('tvList', tvList.value)
-  let localMovieTvData = uni.getStorageSync('localMovieTvData')
-  let nowTv = {}
-  if (routerParams.value.movieTvId) {
-    nowTv = localMovieTvData.tv.find(i => i.movieTvId == routerParams.value.movieTvId)
-  } else {
-    nowTv = localMovieTvData.tv.find(i => i.path == routerParams.value.path)
-  }
+  let localMovieTvData = getMovieTvData()
+  let nowTv = findInView(localMovieTvData, {
+    mediaType: 'tv',
+    tmdbId: routerParams.value.movieTvId,
+    path: routerParams.value.path,
+  }) || {}
   let history = historyPlay.value?.find(
     i =>
       i.titlePlay == handleSeasonName(selectSource.value.name + (activeSeason.value.name == '第一季' ? '' : ' ' + activeSeason.value.name), true) && item.name == i.name
@@ -760,7 +836,7 @@ const setButtonText = () => {
 const judgeSelect = () => {
   nowSourceList.value = uni.getStorageSync('sourceList')
   selectType.value = nowSourceList.value.find(item => {
-    let select = item.list.find(i => i.active)
+    let select = findActiveSource(item.list)
     if (select) {
       selectMedia.value = select
       return true
@@ -808,7 +884,7 @@ const resetMovieTvData = async () => {
     historyArr = historyArr.filter(v => v.sourceType != selectType.value.type || v.sourceName != selectMedia.value.name)
     uni.setStorageSync('historyPlay', [...historyArr, ...historyPlay.value])
     selectSource.value.name = resetMovieTv.name
-    localMovieTvData.value = uni.getStorageSync('localMovieTvData') || {}
+    localMovieTvData.value = getMovieTvData() || {}
 
     if (resetMovieTv.type == 'tv') {
       let nowTv = localMovieTvData.value.tv.find(i => i.movieTvId == oldMovieTvId && i.path == oldPath)
@@ -828,17 +904,25 @@ const resetMovieTvData = async () => {
       nowTv.releaseTime = res1.air_date
       nowTv.overview = res1.overview
     } else if (resetMovieTv.type == 'movie') {
-      let nowMovie = localMovieTvData.value.movie.find(i => i.movieTvId == oldMovieTvId)
-      let res = await getMovieTvDetail()
-      nowMovie.poster = CONFIG.IMG_DOMAIN + '/t/p/w300_and_h450_bestv2' + res.poster_path
-      nowMovie.releaseTime = res.release_date
-      nowMovie.type = '2'
-      nowMovie.movieTvId = res.id
-      nowMovie.genre_ids = res.genres.map(i => i.id)
-      nowMovie.name = res.title
+      // oldMovieTvId 是纠正前的 id，可能属于 tv 空间。只在 movie 列表裸比数字
+      // 会命中无关电影并整条覆盖。用 path（纠正前后不变）精确定位，查不到跳过。
+      let nowMovie = findInView(localMovieTvData.value, {
+        mediaType: 'movie',
+        tmdbId: oldMovieTvId,
+        path: oldPath,
+      })
+      if (nowMovie) {
+        let res = await getMovieTvDetail()
+        nowMovie.poster = CONFIG.IMG_DOMAIN + '/t/p/w300_and_h450_bestv2' + res.poster_path
+        nowMovie.releaseTime = res.release_date
+        nowMovie.type = '2'
+        nowMovie.movieTvId = res.id
+        nowMovie.genre_ids = res.genres.map(i => i.id)
+        nowMovie.name = res.title
+      }
     }
     imgData.value.title = resetMovieTv.name
-    uni.setStorageSync('localMovieTvData', localMovieTvData.value)
+    setMovieTvData(localMovieTvData.value)
     actor_list.value.getActorList()
   }
 }
@@ -860,6 +944,17 @@ setItemWidth()
 
 //打开右侧弹窗
 const openPopup = val => {
+  // 「更多」没有对应的右侧面板组件，它的语义是「手动修正匹配」——
+  // 直接进搜索匹配页。带 workKey 走新库改写，带 query 预填片名直接搜。
+  if (val === 'more') {
+    showRightPopup.value = false
+    const maxSeasonArrLength = Math.max(...sourceList.value.map(v => (v.seasonArr || []).length))
+    const query = encodeURIComponent(imgData.value.title || routerParams.value.name || '')
+    uni.navigateTo({
+      url: `/pages/tv/video/search-match?type=${routerParams.value.type}&maxSeasonLength=${maxSeasonArrLength}&workKey=${encodeURIComponent(routerParams.value.workKey || '')}&query=${query}`,
+    })
+    return
+  }
   showRightPopup.value = true
   focusModel.value = val
 }
@@ -977,9 +1072,9 @@ page {
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.55);
     z-index: 1;
-    /* 半透明黑色遮罩 */
+    /* 半透明黑色遮罩，保证背景原图上的信息可读 */
   }
 
   .video-detail-left {
@@ -990,11 +1085,12 @@ page {
     padding: 30rpx 80rpx 30rpx 80rpx;
     box-sizing: border-box;
     background: linear-gradient(to right, black 0%, rgba(0, 0, 0, 0.7) 80%, rgba(0, 0, 0, 0) 100%);
+    transition: background var(--app-duration-slow) var(--app-ease);
     display: flex;
     flex-direction: column;
 
     .left-title {
-      color: #fff;
+      color: var(--content-text, #fff);
       font-size: 70rpx;
     }
 
@@ -1007,14 +1103,13 @@ page {
         display: flex;
         align-items: center;
 
-        image {
-          width: 30rpx;
-          height: 30rpx;
+        .iconfont {
+          font-size: 30rpx;
         }
 
         span {
           font-size: 28rpx;
-          color: #fff;
+          color: var(--content-text-secondary, #fff);
           padding-left: 10rpx;
         }
       }
@@ -1024,27 +1119,26 @@ page {
         align-items: center;
         padding-left: 14rpx;
 
-        image {
-          width: 30rpx;
-          height: 30rpx;
+        .iconfont {
+          font-size: 30rpx;
         }
 
         span {
           font-size: 28rpx;
-          color: #fff;
+          color: var(--content-text-secondary, #fff);
           padding-left: 10rpx;
         }
       }
 
       .left-info-runtime {
-        color: #fff;
+        color: var(--content-text-secondary, #fff);
         padding: 0 14rpx;
       }
     }
 
     .left-genres {
       padding-top: 20rpx;
-      color: #fff;
+      color: var(--content-text, #fff);
       font-size: 32rpx;
     }
 
@@ -1055,7 +1149,7 @@ page {
       -webkit-box-orient: vertical;
       overflow: hidden;
       text-overflow: ellipsis;
-      color: #c2c5c6;
+      color: var(--content-text-tertiary, #c2c5c6);
     }
   }
 

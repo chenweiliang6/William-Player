@@ -2,15 +2,24 @@
   <div class="home">
     <home-navbar @refresh="refreshVideo" @pause="pauseRefresh" :refreshData="refreshData" :loading="refreshLoading" ref="video_navbar"></home-navbar>
     <!-- <span @click="openVideo">调试用</span> -->
-    <template v-if="!refreshLoading">
+    <!-- 骨架屏只在库里还没有内容时遮挡：刮削改为边刮边显示后，
+         库非空要直接露出海报墙，新卡片就地插入。 -->
+    <template v-if="!refreshLoading || hasLibraryContent(localMovieTvData)">
       <under-img :imgArr="underImgArr" :swipeIndex="swipeIndex" :leave="leave"></under-img>
-      <div class="home-container" v-if="localMovieTvData?.movie?.length || localMovieTvData?.tv?.length">
+      <div class="home-container" v-if="hasLibraryContent(localMovieTvData)">
         <star-recommend @getStarList="getStarList" @change="changeSwiper" ref="star_recommend" :showSwiper="showSwiper"></star-recommend>
         <div class="home-container-list">
           <recent-played v-if="historyPlay.length" :listData="historyPlay"></recent-played>
-          <hx-list :title="t('video.movie')" :listData="localMovieTvData?.movie" v-if="localMovieTvData?.movie?.length"></hx-list>
-          <hx-list :title="t('video.tv')" :listData="localMovieTvData?.tv" v-if="localMovieTvData?.tv?.length"></hx-list>
-          <Classify></Classify>
+          <!-- 6 个分类分区：电影/电视剧/动漫/综艺/纪录片，空分类不渲染 -->
+          <hx-list
+            v-for="tab in categorySections"
+            :key="tab.key"
+            :title="tab.label"
+            :category="tab.key"
+            :listData="tab.list"
+            :revision="libraryRevision"
+          ></hx-list>
+          <Classify :revision="libraryRevision"></Classify>
         </div>
       </div>
       <div class="home-empty" v-else>
@@ -24,6 +33,7 @@
 </template>
 
 <script setup>
+import { setMovieTvData, hasLibraryContent } from '@/utils/scrape'
 import underImg from '../components/under-img.vue'
 import homeNavbar from './components/navbar.vue'
 import starRecommend from '../components/star-recommend.vue'
@@ -34,7 +44,7 @@ import wilModal from '@/components/mobile/wil-modal/index.vue'
 import wilEmpty from '@/components/mobile/wil-empty/index.vue'
 import { ipc } from '@/utils/ipcRenderer'
 import { ipcApiRoute } from '@/utils/ipcApiRoute'
-import { nextTick, onActivated, onDeactivated, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onActivated, onDeactivated, onMounted, onUnmounted, ref } from 'vue'
 import * as CONFIG from '@/utils/config'
 import { useVideoIndex } from '@/hooks/useVideoIndex'
 import { defineOptions } from 'vue'
@@ -57,9 +67,34 @@ const showSwiper = ref(true)
 let scrollTop = 0
 console.log(uni.getStorageSync('historyPlay'))
 
-const { video_navbar, refreshData, refreshLoading, movieTvData, localMovieTvData, tmdbKey, historyPlay, settingData, selectType, refreshVideo, showPage } = useVideoIndex(
+const { video_navbar, refreshData, refreshLoading, movieTvData, localMovieTvData, tmdbKey, historyPlay, settingData, selectType, refreshVideo, showPage, cancelRefresh, libraryRevision } = useVideoIndex(
   { wil_modal }
 )
+
+// 分类分区。对齐爆米花的首页结构：识别失败的条目并入「其他」，
+// 不再单列「未识别」分区。
+const CATEGORY_LABEL = {
+  movie: 'video.movie',
+  tv: 'video.tv',
+  anime: 'video.anime',
+  variety: 'video.variety',
+  documentary: 'video.documentary',
+  // 收纳未识别条目，展示为「其他」，排在最后
+  unidentified: 'video.other',
+}
+const CATEGORY_ORDER = ['movie', 'tv', 'anime', 'variety', 'documentary', 'unidentified']
+
+const categorySections = computed(() => {
+  const data = localMovieTvData.value || {}
+  const byCategory = data.byCategory || {}
+  return CATEGORY_ORDER
+    .map(key => {
+      const fallback = key === 'movie' ? data.movie : key === 'tv' ? data.tv : []
+      const list = byCategory[key]?.length ? byCategory[key] : (fallback || [])
+      return { key, label: t(CATEGORY_LABEL[key]), list }
+    })
+    .filter(sec => sec.list?.length)
+})
 
 const getStarList = arr => {
   underImgArr.value = arr.map(item => {
@@ -74,13 +109,11 @@ const changeSwiper = index => {
   }, 350)
 }
 
+// 取消刮削：只置取消标记，由 useVideoIndex 的 finally 收尾。
+// 不要在这里清空 localMovieTvData —— 取消意味着「放弃本次」，
+// 海报墙应当保持取消前的样子，而不是被打成空状态。
 const pauseRefresh = () => {
-  refreshData.value = { found: 0, toupdate: 0, updated: 0, success: 0, fail: 0 }
-  movieTvData.value = { movie: [], tv: [] }
-  localMovieTvData.value.tv = []
-  localMovieTvData.value.movie = []
-  uni.setStorageSync('localMovieTvData', localMovieTvData.value)
-  refreshLoading.value = false
+  cancelRefresh('user')
 }
 
 const openVideo = () => {

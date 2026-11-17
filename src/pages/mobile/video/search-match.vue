@@ -6,30 +6,45 @@
         <nut-icon name="search" :custom-color="iconColor"></nut-icon>
       </template>
       <template #rightout>
-        <span :style="{color:searchValue?'var(--app-brand)':'var(--app-text-tertiary)'}" @click="toSearch" v-if="!requestParams.query">{{ t('video.search') }}</span>
-        <span v-else :style="{color:'var(--app-brand)'}" @click="toCancel">{{ t('common.cancel') }}</span>
+        <span :style="{ color: searchValue ? 'var(--app-brand)' : 'var(--app-text-tertiary)' }" @click="toSearch" v-if="!requestParams.query">
+          {{ t('video.search') }}
+        </span>
+        <span v-else :style="{ color: 'var(--app-brand)' }" @click="toCancel">{{ t('common.cancel') }}</span>
       </template>
     </nut-searchbar>
     <div class="search-match-list">
-      <wil-list :requestFn="searchMovieTv" :request-params="requestParams" :responseAdapter="responseAdapter" ref="wil_list" :refresherEnabled="false" idKey="id"
-        :pageSize="20" pageNumKey="page" v-if="requestParams.query">
+      <wil-list
+        :requestFn="searchMovieTv"
+        :request-params="requestParams"
+        :responseAdapter="responseAdapter"
+        ref="wil_list"
+        :refresherEnabled="false"
+        idKey="id"
+        :pageSize="20"
+        pageNumKey="page"
+        v-if="requestParams.query"
+      >
         <template #default="item">
-          <div class="search-match-list__item" @click="handleSelect(item,item.$index)" :style="{borderColor:activeIndex==item.$index?'#ff6701':'rgb(235, 235, 235)'}">
-            <div class="item-left" :style="{backgroundImage:`url(${CONFIG.IMG_DOMAIN}/t/p/w300_and_h450_bestv2${item.poster_path })`}">
-              <div :class="['item-left-logo',item.media_type=='tv'?'item-left-tv':'']">
-                <template v-if="item.media_type=='tv'">
-                  <image :src="tvLittle"  />
+          <div
+            class="search-match-list__item"
+            @click="handleSelect(item, item.$index)"
+            :style="{ borderColor: activeIndex == item.$index ? '#ff6701' : 'rgb(235, 235, 235)' }"
+          >
+            <div class="item-left" :style="{ backgroundImage: `url(${CONFIG.IMG_DOMAIN}/t/p/w300_and_h450_bestv2${item.poster_path})` }">
+              <div :class="['item-left-logo', item.media_type == 'tv' ? 'item-left-tv' : '']">
+                <template v-if="item.media_type == 'tv'">
+                  <wil-icon name="xianshiping" custom-color="#ffffff" />
                   <span>{{ t('video.tv') }}</span>
                 </template>
                 <template v-else>
-                  <image :src="movieLittle"  />
+                  <wil-icon name="dianying" custom-color="#ffffff" />
                   <span>{{ t('video.movie') }}</span>
                 </template>
               </div>
             </div>
             <div class="item-right">
               <div class="item-right-name">
-                {{ item.name||item.title }}
+                {{ item.name || item.title }}
               </div>
               <div class="item-right-content">
                 <div class="item-right-content__date">
@@ -37,7 +52,7 @@
                   <span>{{ item.first_air_date || item.release_date || t('video.noReleaseTime') }}</span>
                 </div>
                 <div class="item-right-content__line"></div>
-                <div class="item-right-content__type">{{ item.media_type=='tv' ? t('video.tv') : t('video.movie') }}</div>
+                <div class="item-right-content__type">{{ item.media_type == 'tv' ? t('video.tv') : t('video.movie') }}</div>
               </div>
               <div class="item-right-overview">{{ item.overview || '...' }}</div>
             </div>
@@ -48,23 +63,21 @@
     </div>
     <wil-modal ref="wil_modal"></wil-modal>
     <nut-popup v-model:visible="showSeason" position="bottom" round safe-area-inset-bottom>
-      <nut-picker v-model="popupValue" :columns="seasonColumns" :title="t('video.selectSeason')" @confirm="confirmPicker" @cancel="showSeason = false">
-      </nut-picker>
+      <nut-picker v-model="popupValue" :columns="seasonColumns" :title="t('video.selectSeason')" @confirm="confirmPicker" @cancel="showSeason = false"></nut-picker>
     </nut-popup>
   </div>
 </template>
 
 <script setup>
-import { ref } from "vue";
+import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import wilList from "@/components/mobile/wil-list/index";
-import wilEmpty from "@/components/mobile/wil-empty/index";
-import movieLittle from "@/static/movie-little.png";
-import tvLittle from "@/static/tv-little.png";
-import wilModal from "@/components/mobile/wil-modal/index.vue";
-import { generateChineseNumberMapping } from "@/utils/scrape";
-import { onLoad } from "@dcloudio/uni-app";
-import * as CONFIG from "@/utils/config";
+import wilList from '@/components/mobile/wil-list/index'
+import wilEmpty from '@/components/mobile/wil-empty/index'
+import wilIcon from '@/components/common/wil-icon/index.vue'
+import wilModal from '@/components/mobile/wil-modal/index.vue'
+import { generateChineseNumberMapping, getMovieTvData, applyManualMatch, findInView, normalizeMediaType, fetchDetailForManualMatch } from '@/utils/scrape'
+import { onLoad } from '@dcloudio/uni-app'
+import * as CONFIG from '@/utils/config'
 import { useThemeNavbar } from '@/hooks/useThemeNavbar'
 import { useI18nNavbar } from '@/hooks/useI18nNavbar'
 import { useThemeClass } from '@/hooks/useThemeClass'
@@ -76,133 +89,194 @@ useI18nNavbar('navbar.editInformation')
 const { t } = useI18n()
 const themeClass = useThemeClass()
 const { iconColor } = useThemeColors()
-const searchValue = ref("");
-const requestParams = ref({});
-const activeIndex = ref(null);
+const searchValue = ref('')
+const requestParams = ref({})
+const activeIndex = ref(null)
 
-const showSeason = ref(false);
-const popupValue = ref([]);
-const seasonColumns = ref([]);
-const selectItem = ref({});
+const showSeason = ref(false)
+const popupValue = ref([])
+const seasonColumns = ref([])
+const selectItem = ref({})
 
-const routerParams = ref({});
+const routerParams = ref({})
 
-const wil_modal = ref(null);
+const wil_modal = ref(null)
 
-const responseAdapter = (result) => {
+const responseAdapter = result => {
   if (!result) {
     return {
       listData: [],
       listTotal: 0,
-    };
+    }
   }
   return {
     listData: result.results || [],
     listTotal: +result.total_results,
-  };
-};
+  }
+}
 //通过tmdb接口根据关键词搜索影视
-const searchMovieTv = data => searchMovieTvMulti(data);
+const searchMovieTv = data => searchMovieTvMulti(data)
 
 const toSearch = () => {
-  requestParams.value.query = searchValue.value;
-};
+  requestParams.value.query = searchValue.value
+}
 
 const toCancel = () => {
-  searchValue.value = "";
-  requestParams.value.query = "";
-};
+  searchValue.value = ''
+  requestParams.value.query = ''
+}
 
 const handleSelect = async (item, index) => {
-  activeIndex.value = index;
-  selectItem.value = item;
-  let res = {};
-  if (item.media_type == "tv") {
-    res = await getTvDetail(item.id);
+  activeIndex.value = index
+  selectItem.value = item
+  let res = {}
+  if (item.media_type == 'tv') {
+    res = await getTvDetail(item.id)
     if (routerParams.value.maxSeasonLength > res.seasons.length) {
       uni.showToast({
         title: t('video.librarySeasonMoreThanCurrent'),
-        icon: "none",
-      });
-      return;
+        icon: 'none',
+      })
+      return
     } else {
       if (res.seasons.length >= 2 && routerParams.value.maxSeasonLength == 1) {
-        seasonColumns.value = res.seasons.map((v) => {
-          return { text: v.name, value: v.season_number };
-        });
-        showSeason.value = true;
-        return;
+        seasonColumns.value = res.seasons.map(v => {
+          return { text: v.name, value: v.season_number }
+        })
+        showSeason.value = true
+        return
       }
     }
   } else {
-    res = await getMovieDetail(item.id);
+    res = await getMovieDetail(item.id)
   }
 
   wil_modal.value.showModal({
     title: t('modal.warmTip'),
     content: t('video.matchVideoConfirm'),
-    confirmColor: "#ff6701",
+    confirmColor: '#ff6701',
     confirm: async () => {
-      let localMovieTvData = uni.getStorageSync("localMovieTvData");
-      if (localMovieTvData.movie.some((i) => i.movieTvId == item.id) || localMovieTvData.tv.some((i) => i.movieTvId == item.id)) {
+      // 新库模式：从「其他」分区带 workKey 进来，直接改写库里的 Work。
+      // 这是未识别条目的修正入口——自动匹配覆盖不到的情况靠它兜底。
+      if (routerParams.value.workKey) {
+        const type = normalizeMediaType(item.media_type)
+        // 与旧分支一致：禁止把电影手动纠成剧集（反之亦然）。
+        // 跨类型改写会打乱 seasons 结构，且与碰撞裁决语义冲突。
+        if (normalizeMediaType(routerParams.value.type) !== type) {
+          const mapping = { tv: t('video.tv'), movie: t('video.movie') }
+          uni.showToast({
+            title: t('video.currentVideoTypeMismatch', {
+              currentType: mapping[normalizeMediaType(routerParams.value.type)],
+              selectedType: mapping[type],
+            }),
+            icon: 'none',
+          })
+          return
+        }
+        const detail = await fetchDetailForManualMatch(item)
+        const result = applyManualMatch({
+          workKey: routerParams.value.workKey,
+          tmdbDetail: detail,
+        })
+        if (result?.conflict) {
+          // 目标影片已在库中：拦下来，避免产生重复 workId 被下次启动静默折叠
+          uni.showToast({ title: t('video.duplicateVideoInLibrary'), icon: 'none' })
+          return
+        }
+        if (!result?.work) {
+          uni.showToast({ title: t('video.matchFailed', { default: '匹配失败' }), icon: 'none' })
+          return
+        }
+        uni.showToast({ title: t('video.matchSuccess', { default: '已修正' }), icon: 'none' })
+        setTimeout(() => uni.navigateBack(), 600)
+        return
+      }
+
+      let localMovieTvData = getMovieTvData()
+      const type = normalizeMediaType(item.media_type)
+      // 重复检查必须按「类型 + id」——只比数字会让「库里已有同号电影」
+      // 挡住合法的同号剧集（TMDB 的 movie id 与 tv id 是两套独立空间）。
+      if (findInView(localMovieTvData, { mediaType: type, tmdbId: item.id })) {
         uni.showToast({
           title: t('video.duplicateVideoInLibrary'),
-          icon: "none",
-        });
-        return;
+          icon: 'none',
+        })
+        return
       }
-      let type = item.media_type == "tv" ? "tv" : "movie";
       const mapping = {
         tv: t('video.tv'),
         movie: t('video.movie'),
-      };
-      if (routerParams.value.type != type) {
-        uni.showToast({
-          title: t('video.currentVideoTypeMismatch', { currentType: mapping[routerParams.value.type], selectedType: mapping[type] }),
-          icon: "none",
-        });
-        return;
       }
-      uni.setStorageSync("resetMovieTv", { type: type, movieTvId: item.id, name: item.name || item.title }); //设置到缓存，详情页去获取
-      uni.navigateBack();
+      if (normalizeMediaType(routerParams.value.type) !== type) {
+        uni.showToast({
+          title: t('video.currentVideoTypeMismatch', {
+            currentType: mapping[normalizeMediaType(routerParams.value.type)],
+            selectedType: mapping[type],
+          }),
+          icon: 'none',
+        })
+        return
+      }
+      uni.setStorageSync('resetMovieTv', { type: type, movieTvId: item.id, name: item.name || item.title }) //设置到缓存，详情页去获取
+      uni.navigateBack()
     },
-  });
-};
+  })
+}
+
 
 const confirmPicker = ({ selectedValue, selectedOptions }) => {
-  let localMovieTvData = uni.getStorageSync("localMovieTvData");
-  if (localMovieTvData.movie.some((i) => i.movieTvId == selectItem.value.id) || localMovieTvData.tv.some((i) => i.movieTvId == selectItem.value.id && selectedValue[0] == i.season)) {
+  let localMovieTvData = getMovieTvData()
+  let type = normalizeMediaType(selectItem.value.media_type)
+  // 按「类型 + id」查重：剧集额外比较季号，电影只看身份
+  const dup = findInView(localMovieTvData, { mediaType: type, tmdbId: selectItem.value.id })
+  if (dup && (type === 'movie' || selectedValue[0] == dup.season)) {
     uni.showToast({
       title: t('video.duplicateVideoInLibrary'),
-      icon: "none",
-    });
-    return;
+      icon: 'none',
+    })
+    return
   }
-  let type = selectItem.value.media_type == "tv" ? "tv" : "movie";
   const mapping = {
     tv: t('video.tv'),
     movie: t('video.movie'),
-  };
-  if (routerParams.value.type != type) {
-    uni.showToast({
-      title: t('video.currentVideoTypeMismatch', { currentType: mapping[routerParams.value.type], selectedType: mapping[type] }),
-      icon: "none",
-    });
-    return;
   }
-  const numberMapping = generateChineseNumberMapping(40, "number");
+  if (normalizeMediaType(routerParams.value.type) !== type) {
+    uni.showToast({
+      title: t('video.currentVideoTypeMismatch', {
+        currentType: mapping[normalizeMediaType(routerParams.value.type)],
+        selectedType: mapping[type],
+      }),
+      icon: 'none',
+    })
+    return
+  }
+  const numberMapping = generateChineseNumberMapping(40, 'number')
   // console.log(selectedValue[0],'选择');
-  let season = selectedValue[0] == "1" || !numberMapping[selectedValue[0]] ? "" : ` ${t('video.seasonTitle', { season: selectedValue[0] })}`;
-  if (selectedValue[0] == "0") season = ` ${t('video.specialEpisode')}`;
-  console.log(selectItem.value.name + season);
+  let season = selectedValue[0] == '1' || !numberMapping[selectedValue[0]] ? '' : ` ${t('video.seasonTitle', { season: selectedValue[0] })}`
+  if (selectedValue[0] == '0') season = ` ${t('video.specialEpisode')}`
+  console.log(selectItem.value.name + season)
 
-  uni.setStorageSync("resetMovieTv", { type: type, movieTvId: selectItem.value.id, name: routerParams.value.type == "tv" ? selectItem.value.name + season : selectItem.value.title }); //设置到缓存，详情页去获取
-  uni.navigateBack();
-};
+  uni.setStorageSync('resetMovieTv', {
+    type: type,
+    movieTvId: selectItem.value.id,
+    name: routerParams.value.type == 'tv' ? selectItem.value.name + season : selectItem.value.title,
+  }) //设置到缓存，详情页去获取
+  uni.navigateBack()
+}
 
-onLoad((options) => {
-  routerParams.value = options;
-});
+onLoad(options => {
+  routerParams.value = options
+  // 从「其他」分区的「修正匹配」带 query 进来时，预填搜索词并直接搜一次，
+  // 省得用户再手工输入一遍片名
+  if (options?.query) {
+    // uni 的 onLoad 已经对 URL 参数做过一次 decodeURIComponent，
+    // 这里再解一次遇到片名含 `%` 会抛 URIError。失败就沿用原值。
+    let q = options.query
+    try { q = decodeURIComponent(q) } catch { /* 已是解码后的值 */ }
+    searchValue.value = q
+    requestParams.value = { query: q }
+  }
+})
 </script>
 
 <style lang="scss" scoped>
@@ -222,7 +296,7 @@ page {
     font-size: 36rpx;
     font-weight: bold;
   }
-  ::v-deep .nut-searchbar {
+  :deep(.nut-searchbar) {
     padding: 18rpx 0;
     .nut-searchbar__search-input {
       border-radius: 12rpx;
@@ -250,7 +324,7 @@ page {
     justify-content: center;
     flex: 1;
     overflow: hidden;
-    ::v-deep .load-list {
+    :deep(.load-list) {
       .search-match-list__item {
         margin-bottom: 24rpx;
         border-radius: 16rpx;
@@ -274,9 +348,10 @@ page {
             position: absolute;
             top: 0;
             left: 0;
-            image {
+            .iconfont {
               width: 24rpx;
               height: 24rpx;
+              font-size: 24rpx;
             }
             span {
               font-size: 22rpx;

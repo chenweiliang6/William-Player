@@ -2,6 +2,7 @@
 import { useThemeStore } from '@/stores/theme'
 import { useLocaleStore } from '@/stores/locale'
 import i18n from '@/i18n'
+import { initLibrary } from '@/utils/scrape'
 
 export default {
   onLaunch: function () {
@@ -10,6 +11,11 @@ export default {
     themeStore.init()
     const localeStore = useLocaleStore()
     localeStore.init(i18n)
+
+    // 刮削库初始化：把落盘数据加载进内存。
+    // PC 端走 IPC（异步），App/H5 走 uni storage。不 await 也不影响启动，
+    // 因为 store 未就绪时读的是空库，UI 订阅后会自动重渲染。
+    initLibrary().catch(e => console.warn('[App] 影视库初始化失败:', e))
 
     if (uni.onThemeChange) {
       uni.onThemeChange(res => {
@@ -39,6 +45,7 @@ export default {
 @import 'nutui-uniapp/styles/index.scss';
 @import './styles/nutui.scss';
 @import './styles/theme-vars.scss';
+@import './styles/iconfont.scss';
 
 /*每个页面公共css */
 .nut-button {
@@ -55,7 +62,9 @@ div {
 
 @media (min-width: 960px) {
   html {
-    font-size: var(--tv-fontsize) !important;
+    /* --tv-fontsize 由 tv-page 组件注入；PC 端没有该组件，回退 16px，
+       否则 html 字号为 0，所有 rpx 尺寸都会塌成 0 */
+    font-size: var(--tv-fontsize, 16px) !important;
   }
 }
 

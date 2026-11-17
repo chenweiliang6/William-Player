@@ -1,6 +1,10 @@
 <template>
   <div :class="['download', themeClass]">
-    <wil-navbar :title="t('navbar.downloadManagement')" :rightShow="true"></wil-navbar>
+    <wil-navbar :title="t('navbar.downloadManagement')" :rightShow="true">
+      <template #right>
+        <wil-icon name="gengduo" class="navbar-more" @click="showActionPopover = true" />
+      </template>
+    </wil-navbar>
     <div class="download-container">
       <template v-if="downloadList?.length">
         <div class="download-title">{{ t('toolbox.downloadingCount', { count: downloadList?.length }) }}</div>
@@ -18,21 +22,37 @@
       <template v-if="completedList?.length">
         <div class="completed-title">{{ t('toolbox.completedDownloadCount', { count: completedList?.length }) }}</div>
         <div class="completed-list">
-          <list-item v-for="item in completedList" :key="item.id" :data="item" @click="openDocument(item)"></list-item>
+          <list-item
+            v-for="item in completedList"
+            :key="item.id"
+            :data="item"
+            @click="openDocument(item)"
+            @deleteById="deleteById"></list-item>
         </div>
       </template>
     </div>
+    <nut-popup v-model:visible="showActionPopover" position="bottom" round safe-area-inset-bottom>
+      <div :class="['download-actions', themeClass]">
+        <nut-cell v-if="downloadList?.length" :title="t('toolbox.pauseAllTasks')" @click="handlePauseAll"></nut-cell>
+        <nut-cell v-if="pausedCount" :title="t('toolbox.resumeAllTasks')" @click="handleResumeAll"></nut-cell>
+        <nut-cell v-if="completedList?.length" :title="t('toolbox.clearCompletedTasks')" @click="handleClearCompleted"></nut-cell>
+        <nut-cell v-if="taskList?.length" :title="t('toolbox.deleteAllTasks')" @click="handleDeleteAll"></nut-cell>
+      </div>
+    </nut-popup>
+    <wil-modal ref="wil_modal"></wil-modal>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import wilNavbar from '@/components/mobile/wil-navbar/index.vue'
+import { ref, computed } from 'vue'
+import { onUnload } from '@dcloudio/uni-app'
 import listItem from './components/list-item.vue'
-import { handleSize } from '@/utils/emby.js'
 import { useThemeClass } from '@/hooks/useThemeClass'
 import { useI18n } from 'vue-i18n'
 import { useI18nNavbar } from '@/hooks/useI18nNavbar'
+import { initDownloader, ACTIVE_STATUS, pauseAll, resumeAll, deleteAll, clearCompleted } from '@/utils/download'
+import wilModal from '@/components/mobile/wil-modal/index.vue'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 
 const themeClass = useThemeClass()
 const { t } = useI18n()
@@ -40,134 +60,154 @@ useI18nNavbar('navbar.downloadManagement')
 const taskList = ref([])
 const downloadList = ref([])
 const completedList = ref([])
-const index1 = ref(0)
+const showActionPopover = ref(false)
+const wil_modal = ref(null)
 let DownloaderManager = null
 let isListener = false //是否正在监听
+//暂停中的任务数，决定「全部继续」是否显示
+const pausedCount = computed(() => taskList.value.filter(i => i.status === 'PAUSED').length)
 
-const openDocument = item => {
-  uni.navigateTo({
-    url: `/pages/mobile/video/video-player?videoUrl=${encodeURIComponent(
-      `/storage/emulated/0/Android/data/com.android.williamplayer/cache/myDownloader/${item.name}`
-    )}&noSetHistory=0`, //noSetHistory为0表示不缓存历史播放记录
-  })
-}
-
-const initDownloader = () => {
+//本页自己的模块实例：startListener / stopListener 挂在实例上，
+//只在本页内成对调用，避免和 utils/download.js 的实例互相顶掉监听
+const getDownloader = () => {
   if (!DownloaderManager) {
     DownloaderManager = uni.requireNativePlugin('WilliamDownloader')
-    DownloaderManager.init(
-      {
-        maxDownloadTasks: 3, // 最大同时下载任务数
-        downloadDir: '/storage/emulated/0/Android/data/com.android.williamplayer/cache/myDownloader', // 下载文件路径
-        maxDownloadThreads: 3, // 最大下载线程数
-        autoRecovery: true, // 是否自动恢复下载
-        openRetry: true, // 下载失败是否打开重试
-        maxRetryCount: 2, // 重试次数
-        retryIntervalMillis: 1000, // 每次重试时间间隔（毫秒）
-      },
-      function (res) {
-        if (0 == res.code) {
-          // uni.showToast({
-          //   title: res.msg,
-          //   icon: 'none',
-          // })
-          // 显示下载列表
-        }
-      }
-    )
   }
+  return DownloaderManager
+}
+
+const openDocument = item => {
+  // 未完成时磁盘上只有 xxx.part，filePath 指向的正式文件并不存在，点了必然播放失败
+  if (item.status !== 'COMPLETED') return
+  // v2 的文件落在外置专属目录，路径由原生按数据库给出，不要再自己拼
+  if (!item.filePath) return
+  uni.navigateTo({
+    url: `/pages/mobile/video/video-player?videoUrl=${encodeURIComponent(item.filePath)}&noSetHistory=0`, //noSetHistory为0表示不缓存历史播放记录
+  })
 }
 
 //监听下载进度
 const startListener = () => {
   if (!isListener) {
     isListener = true //此时已经在监听了
-    DownloaderManager.startListener(result => {
-      index1.value++
-      let res = JSON.parse(result.data)
-      if (res instanceof Object) {
-        let obj = {
+    getDownloader().startListener(result => {
+      // v2 的 data 已经是对象，不要再 JSON.parse
+      const res = result && result.data
+      if (res && typeof res === 'object') {
+        const obj = {
           id: res.id,
-          name: res.save_name,
+          name: res.name,
+          filePath: res.filePath,
+          imgUrl: res.poster,
           status: res.status,
-          current_size: res.current_size,
-          total_size: res.total_size,
+          errorCode: res.errorCode,
+          errorMsg: res.errorMsg,
+          percent: res.percent,
+          current_size: res.doneText,
+          total_size: res.totalText,
+          speedText: res.speedText,
         }
-        if (taskList.value.every(i => i.id !== obj.id)) {
-          taskList.value.push(obj)
+        const exit = taskList.value.find(i => i.id === obj.id)
+        if (exit) {
+          Object.assign(exit, obj)
         } else {
-          let exit = taskList.value.find(i => i.id === obj.id)
-          exit.speed = handleSize(res.current_byte - exit.current_byte) + '/s'
-          exit.current_size = res.current_size
-          exit.current_byte = res.current_byte
-          exit.total_size = res.total_size
-          exit.percent = res.percent
-          exit.status = res.status
+          taskList.value.unshift(obj)
         }
+        refreshLists()
       }
     })
   }
 }
 
-//创建下载任务
-const createDownload = () => {
-  initDownloader()
-  DownloaderManager.createDownloadTask(
-    {
-      downUrl:
-        'https://media-zjhz-fy-person01.zj6oss.ctyunxs.cn/PERSONCLOUD/f310df5a-15cd-4dbc-b414-7a5100252967.mp4?x-amz-CLIENTTYPEIN=PC&AWSAccessKeyId=0Lg7dAq3ZfHvePP8DKEU&x-amz-userLevel=100&x-amz-limitrate=51200&response-content-type=video/mp4&x-amz-UID=64784934&response-content-disposition=attachment%3Bfilename%3D%2209.mp4%22%3Bfilename*%3DUTF-8%27%2709.mp4&x-amz-CLIENTNETWORK=UNKNOWN&x-amz-CLOUDTYPEIN=PERSON&Signature=4XB2gn0QF%2BQtw3HR3DyRot7tlL8%3D&Expires=1769238525&x-amz-FSIZE=1227841923&x-amz-UFID=225481186083258592',
-      saveName: '腾讯视频.mp4', // 此处可改成根据下载地址自动获取文件名及文件格式
-      imgUrl: 'https://n.sinaimg.cn/sinakd20230822s/429/w1000h1029/20230822/85c9-12a6845ed1089e9489c8510b78bfd6ef.jpg',
-    },
-    function (res) {
-      uni.showToast({
-        title: res,
-        icon: 'none',
-        duration: 7000,
-      })
-      if (res.code == 0) {
-        // uni.showToast({
-        //   title: '创建下载任务之后开始监听',
-        // })
-        queryAll()
-        startListener()
-      }
-    }
-  )
+//按状态拆分进行中 / 已完成两份列表
+const refreshLists = () => {
+  downloadList.value = taskList.value.filter(i => ACTIVE_STATUS.includes(i.status))
+  completedList.value = taskList.value.filter(i => i.status === 'COMPLETED')
 }
 
 //暂停单个下载任务
 const pauseById = id => {
-  DownloaderManager.pauseById(id)
+  getDownloader().pauseById(id, queryAll)
 }
 //取消暂停下载任务
 const resumeById = id => {
-  DownloaderManager.resumeById(id)
+  getDownloader().resumeById(id, queryAll)
 }
 
 //通过id删除下载任务
 const deleteById = item => {
-  // 删除之前若任务在进行中，请先暂停任务再进行删除操作
-  pauseById(item.id)
-  // deleteById 参数1：任务id 参数2：是否同时删除文件 参数3：要删除的文件名
-  DownloaderManager.deleteById(item.id, true, item.name)
-  queryAll()
+  // v2 引擎会先 cancel 再删，不需要前端先暂停；第三参是回调，不再是文件名
+  getDownloader().deleteById(item.id, true, queryAll)
+}
+
+// ------------------------------------------------------------ 批量操作
+const closeActions = () => {
+  showActionPopover.value = false
+}
+
+const handlePauseAll = () => {
+  closeActions()
+  pauseAll(queryAll)
+}
+
+const handleResumeAll = () => {
+  closeActions()
+  resumeAll(queryAll)
+}
+
+const handleClearCompleted = () => {
+  closeActions()
+  wil_modal.value.showModal({
+    title: t('modal.warmTip'),
+    content: t('toolbox.clearCompletedConfirm'),
+    confirmColor: '#ff6701',
+    confirm: () => clearCompleted(true, queryAll),
+  })
+}
+
+const handleDeleteAll = () => {
+  closeActions()
+  wil_modal.value.showModal({
+    title: t('modal.warmTip'),
+    content: t('toolbox.deleteAllConfirm'),
+    confirmColor: '#ff6701',
+    confirm: () => deleteAll(true, queryAll),
+  })
 }
 
 //查询所有下载任务
 const queryAll = () => {
-  initDownloader()
-  DownloaderManager.queryAll(res => {
-    taskList.value = res.data ? JSON.parse(res.data) : []
-    downloadList.value = taskList.value.filter(i => i.status === 'DOWNLOADING' || i.status === 'PAUSED' || i.status === 'CONNECTING' || i.status === 'ERROR')
-    completedList.value = taskList.value.filter(i => i.status === 'COMPLETED')
-    startListener()
+  initDownloader(() => {
+    getDownloader().queryAll(res => {
+      // v2 的 data 已经是数组
+      taskList.value = Array.isArray(res && res.data) ? res.data : []
+      refreshLists()
+      startListener()
+    })
   })
 }
+
+onUnload(() => {
+  if (isListener && DownloaderManager) {
+    DownloaderManager.stopListener()
+  }
+  isListener = false
+})
+
 queryAll()
 </script>
 
 <style lang="scss" scoped>
+.navbar-more {
+  font-size: 44rpx;
+  color: var(--app-icon-strong);
+}
+
+.download-actions {
+  padding: 12rpx 0;
+  background: var(--app-bg-secondary);
+}
+
 .download {
   width: 100%;
   height: 100%;

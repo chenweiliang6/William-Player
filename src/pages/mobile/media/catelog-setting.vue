@@ -4,14 +4,14 @@
             <template #tvCatelog>
                 <nut-cell :title="t('navbar.tvCatelogSetting')" is-link @click="toMuluList('tv')">
                     <template #icon>
-                        <image :src="isDark ? xspGray : xspBlack"  />
+                        <wil-icon name="xianshiping" class="icon-theme" />
                     </template>
                 </nut-cell>
             </template>
             <template #movieCatelog>
                 <nut-cell :title="t('navbar.movieCatelogSetting')" is-link @click="toMuluList('movie')">
                     <template #icon>
-                        <image :src="isDark ? dyGray : dyBlack"  />
+                        <wil-icon name="dianying" class="icon-theme" />
                     </template>
                 </nut-cell>
             </template>
@@ -22,21 +22,16 @@
 <script setup>
 //目录设置
 import wilForm from "@/components/mobile/wil-form/index.vue";
+import wilIcon from "@/components/common/wil-icon/index.vue";
 import { useThemeNavbar } from '@/hooks/useThemeNavbar'
 import { useI18nNavbar } from '@/hooks/useI18nNavbar'
 import { useThemeClass } from '@/hooks/useThemeClass'
-import { useThemeColors } from '@/hooks/useThemeColors'
-import xspBlack from '@/static/xsp-black.png'
-import dyBlack from '@/static/dy-black.png'
-import xspGray from '@/static/xsp-gray.png'
-import dyGray from '@/static/dy-gray.png'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
 useThemeNavbar()
 useI18nNavbar('navbar.catelogSetting')
 const themeClass = useThemeClass()
-const { isDark } = useThemeColors()
 const settings2 = [
     { label: "", prop: "tvCatelog" },
     { label: "", prop: "movieCatelog" },
@@ -85,9 +80,8 @@ page {
                                         background: transparent;
 
                                         .nut-cell__icon {
-                                            image {
-                                                width: 40rpx;
-                                                height: 40rpx;
+                                            .iconfont {
+                                                font-size: 40rpx;
                                             }
                                         }
 

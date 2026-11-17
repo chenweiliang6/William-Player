@@ -14,16 +14,20 @@
     <div class="hxList-list">
       <scroll-view class="hxList-list-scroll" :scroll-x="true" style="width: 100%" :enhanced="true" :showScrollbar="false">
         <div class="hxList-list-movie">
-          <div class="hxList-list-movie__item" v-for="item in listData1" :key="item.name" @click="toVideoDetail(item)">
-            <img
-              :src="!props.isConnected && !item.loadImg ? emptyBg : setEmptyImg(item.poster)"
-              style="object-fit: cover"
-              @error="imgError(item)"
-              @load="imgLoad(item)"
-              draggable="false"
-            />
+          <div class="hxList-list-movie__item" v-for="item in listData1" :key="item.workKey || (item.name + (item.type || ''))" @click="toVideoDetail(item)">
+            <div class="hxList-list-movie__poster">
+              <img
+                :src="!props.isConnected && !item.loadImg ? emptyBg : setEmptyImg(item.poster)"
+                style="object-fit: cover"
+                @error="imgError(item)"
+                @load="imgLoad(item)"
+                draggable="false"
+              />
+              <!-- 评分徽标：对齐爆米花，贴在海报右下角 -->
+              <span v-if="showVote(item)" class="hxList-list-movie__vote">{{ voteText(item) }}</span>
+            </div>
             <span class="hxList-list-movie__item-name">{{ removeExtension(item.name) }}</span>
-            <span class="hxList-list-movie__item-time">{{ item.releaseTime || t('video.noReleaseTime') }}</span>
+            <span class="hxList-list-movie__item-time">{{ cardSubText(item, t) }}</span>
           </div>
         </div>
       </scroll-view>
@@ -31,11 +35,12 @@
   </div>
 </template>
 <script setup>
-import { computed, ref, nextTick } from 'vue'
+import { computed, ref, nextTick, watch } from 'vue'
 import emptyBg from '@/static/empty_bg.png'
 import posterEmpty from '@/static/poster-empty.png'
 import { onShow } from '@dcloudio/uni-app'
 import { handleSeasonName } from '@/utils/scrape'
+import { showVote, voteText, cardSubText } from '@/utils/card-meta'
 import * as CONFIG from '@/utils/config'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -45,17 +50,24 @@ const { t } = useI18n()
 const props = defineProps({
   title: { type: String, default: '' },
   type: { type: String, default: '' },
+  // 展示分类（movie/tv/anime/variety/documentary），用于「查看全部」带参
+  category: { type: String, default: '' },
   listData: { type: Array, default: [] },
+  // 库内容版本号。刮削边刮边显示时列表会在页面不重新挂载的情况下增长，
+  // listData1 是 props 的快照，必须靠它触发重建。
+  revision: { type: Number, default: 0 },
   isConnected: { type: Boolean, default: false }, //手机是否连接网络
 })
 
 const router = useRouter()
 const emits = defineEmits(['clickAll'])
 const displayTitle = computed(() => props.title || t('video.movie'))
-const listData1 = ref(JSON.parse(JSON.stringify(props.listData)).slice(0, 30))
-listData1.value.forEach(item => {
-  item.loadImg = true
-})
+
+// **先 slice 再浅拷贝**。早期是 JSON.parse(JSON.stringify(props.listData))
+// 再 slice：整表序列化+反序列化一遍才截断，某个分区上万条时这是首屏最大开销。
+// 边刮边显示后重建频率提高，这个写法会把开销放大。
+const takeTop = list => (list || []).slice(0, 30).map(item => ({ ...item, loadImg: true }))
+const listData1 = ref(takeTop(props.listData))
 
 const removeExtension = filename => {
   let name = handleSeasonName(filename, true)
@@ -74,9 +86,16 @@ const typeMapping = () => ({
   [t('video.movie')]: 'movie',
   [t('video.tv')]: 'tv',
 })
+// 详情页需要真实媒体类型（movie/tv），分类页签只能表达展示分组。
+// 优先用条目自带 type（'1'=剧集，'2'=电影）。
+const getItemMediaType = item => {
+  if (item?.type === '1' || item?.type === 1) return 'tv'
+  if (item?.type === '2' || item?.type === 2) return 'movie'
+  if (props.category === 'movie') return 'movie'
+  if (['tv', 'anime', 'variety', 'documentary'].includes(props.category)) return 'tv'
+  return typeMapping()[displayTitle.value]
+}
 const toVideoDetail = item => {
-  console.log(item, 'ite,/type')
-
   if (props.type === 'emby') {
     router.push({
       path: `/embyDetail`,
@@ -85,7 +104,7 @@ const toVideoDetail = item => {
   } else {
     router.push({
       path: `/homeDetail`,
-      query: { name: handleSeasonName(item.name, true), type: typeMapping()[displayTitle.value], source: JSON.stringify(item.source), movieTvId: item.movieTvId },
+      query: { name: handleSeasonName(item.name, true), type: getItemMediaType(item), source: JSON.stringify(item.source), movieTvId: item.movieTvId, workKey: item.workKey || '' },
     })
   }
 }
@@ -96,7 +115,7 @@ const toVideoAll = () => {
   } else {
     router.push({
       path: `/homeAll`,
-      query: { title: displayTitle.value },
+      query: { title: displayTitle.value, category: props.category },
     })
   }
 }
@@ -122,26 +141,21 @@ const setEmptyImg = poster => {
   }
 }
 
-onShow(() => {
+const rebuild = () => {
   nextTick(() => {
-    listData1.value = JSON.parse(JSON.stringify(props.listData)).slice(0, 30)
-    listData1.value.forEach(item => {
-      item.loadImg = true
-    })
+    listData1.value = takeTop(props.listData)
   })
-})
-</script>
-<style lang="scss" scoped>
-@keyframes opacityIn {
-  0% {
-    opacity: 0;
-  }
-
-  100% {
-    opacity: 1;
-  }
 }
 
+onShow(rebuild)
+
+// 刮削边刮边显示：库增长时父组件会递增 revision，这里必须重建快照。
+watch(
+  () => [props.revision, props.listData],
+  rebuild,
+)
+</script>
+<style lang="scss" scoped>
 .hxList {
   width: 100%;
   margin-bottom: 50rpx;
@@ -203,14 +217,6 @@ onShow(() => {
           cursor: pointer;
           overflow: hidden;
 
-          img {
-            width: 100%;
-            aspect-ratio: 107 / 160;
-            height: auto;
-            border-radius: 20rpx;
-            object-fit: cover;
-          }
-
           &-name {
             font-size: 28rpx;
             font-weight: bold;
@@ -232,15 +238,41 @@ onShow(() => {
           &:first-child {
             margin-left: 0;
           }
+
+          // 海报容器与评分徽标必须单独写完整类名。
+          // 若写成 `&-poster` / `&-vote` 接在 `&:active` 之类的组合后面，
+          // `&` 会接续上一段的选择器，规则不生效（移动端踩过这个坑）。
+          .hxList-list-movie__poster {
+            position: relative;
+            width: 100%;
+            overflow: hidden;
+            border-radius: 20rpx;
+
+            img {
+              display: block;
+              width: 100%;
+              aspect-ratio: 107 / 160;
+              height: auto;
+              border-radius: 20rpx;
+              object-fit: cover;
+            }
+          }
+
+          .hxList-list-movie__vote {
+            position: absolute;
+            right: 8rpx;
+            bottom: 8rpx;
+            padding: 0 10rpx;
+            height: 34rpx;
+            line-height: 34rpx;
+            border-radius: 8rpx;
+            background: rgba(0, 0, 0, 0.6);
+            color: #ffc93c;
+            font-size: 22rpx;
+            font-weight: bold;
+          }
         }
 
-        .is-move {
-          transition: transform 0.3s ease;
-        }
-
-        .is-new {
-          animation: opacityIn 0.3s ease;
-        }
       }
     }
   }

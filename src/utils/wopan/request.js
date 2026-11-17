@@ -68,6 +68,7 @@ const httpPost = (url, header, body, timeout = 20000) => {
  * @param {string} opts.accessToken access token（wohome 通道必填：请求头 + 解密密钥）
  * @param {string} opts.refreshToken wohome 失败时自动刷新用
  * @param {boolean} opts.retry 失败自动刷新重试一次（默认 true；api-user 通道不走刷新重试）
+ * @param {number} [opts.timeout] 单次请求超时，不传时 httpPost 用 20000 默认值
  * @returns {Promise<object>} RSP.DATA 解析结果
  */
 export const requestWopan = async ({
@@ -78,6 +79,7 @@ export const requestWopan = async ({
   accessToken = '',
   refreshToken = '',
   retry = true,
+  timeout,
 }) => {
   const url = `${CONFIG.WopanDispatcherUrl}/${channel}/dispatcher`
   const header = {
@@ -93,7 +95,7 @@ export const requestWopan = async ({
     body: buildWopanBody(channel, param, other, accessToken),
   }
 
-  const { statusCode, data } = await httpPost(url, header, payload)
+  const { statusCode, data } = await httpPost(url, header, payload, timeout)
   const resp = typeof data === 'string' ? JSON.parse(data) : data
 
   if (Number(statusCode) !== 200) {
@@ -110,7 +112,7 @@ export const requestWopan = async ({
     // wohome 通道失败 → 刷新 token 后重试一次（对齐 Go request retry 逻辑）
     if (channel === CHANNEL_WOHOME && retry && refreshToken) {
       const newToken = await refreshWopanToken(refreshToken)
-      return requestWopan({ channel, key, param, other, accessToken: newToken.accessToken, refreshToken: newToken.refreshToken, retry: false })
+      return requestWopan({ channel, key, param, other, accessToken: newToken.accessToken, refreshToken: newToken.refreshToken, retry: false, timeout })
     }
     throw { code: rsp.RSP_CODE || 'WOPAN_RSP_FAIL', message: rsp.RSP_DESC || 'wopan rsp failed' }
   }
@@ -126,5 +128,5 @@ export const requestApiUser = ({ key, param, other }) =>
 /**
  * wohome 通道请求（文件操作）
  */
-export const requestWoHome = ({ key, param, other, accessToken, refreshToken }) =>
-  requestWopan({ channel: CHANNEL_WOHOME, key, param, other, accessToken, refreshToken })
+export const requestWoHome = ({ key, param, other, accessToken, refreshToken, timeout }) =>
+  requestWopan({ channel: CHANNEL_WOHOME, key, param, other, accessToken, refreshToken, timeout })

@@ -1,24 +1,37 @@
 <template>
   <div :class="['source-list', themeClass]">
-    <wil-navbar :title="t('navbar.resourceLibrary')" :leftShow="true">
+    <wil-navbar :title="t('navbar.resourceLibrary')" :leftShow="false" :rightShow="true">
       <template #right>
-        <nut-icon name="uploader" :custom-color="iconColor" @click="toAddFile"></nut-icon>
+        <div class="navbar-actions">
+          <wil-icon name="xiazai" class="navbar-icon" :custom-color="iconColor" @click="toDownload" />
+          <nut-icon name="uploader" :custom-color="iconColor" @click="toAddFile"></nut-icon>
+        </div>
       </template>
     </wil-navbar>
     <div class="source-list-container" v-if="show">
+      <!-- 本地下载卡片 -->
+      <div class="download-card" @click="toDownload">
+        <div class="download-card__icon">
+          <wil-icon name="xiazai" custom-color="var(--app-brand)" />
+        </div>
+        <span class="download-card__name">{{ t('resourceLibrary.localDownload') }}</span>
+        <nut-icon name="right" :custom-color="iconColorMuted"></nut-icon>
+      </div>
+
       <div class="source-list-item" v-for="item in sourceList" :key="item.type">
         <template v-if="item.list.length">
           <div class="source-list-item__title">{{ item.type }}</div>
           <div class="source-list-item__list">
-            <div :class="['list-item', item.list.length == 1 ? 'list-one' : '', vitem.active ? 'list-active' : '']"
-              v-for="vitem in item.list" :key="vitem.name" @click="handleSelect(item, vitem)">
+            <div :class="['list-item', 'card-item']"
+              v-for="vitem in item.list" :key="vitem.name" @click="openManage(item, vitem)">
               <div class="list-item-img">
-                <image :src="item.img"  />
+                <image v-if="getSourceIcon(item.type).kind === 'image'" :src="getSourceIcon(item.type).value" />
+                <wil-icon v-else :name="getSourceIcon(item.type).value" class="list-item-glyph" />
               </div>
-              <div class="list-item-name" :class="[vitem.active ? 'list-item-activeName' : '']">{{ vitem.name }}</div>
-              <image class="list-item-button"
-                :src="vitem.active ? moreOrange : isDark ? moreWhite : moreBlack"
-                @click.stop="toShowMoreButton(item, vitem)"  />
+              <div class="list-item-name">{{ vitem.name }}</div>
+              <wil-icon name="gengduo" class="list-item-button"
+                :style="{ color: 'var(--app-icon-strong)' }"
+                @click.stop="toShowMoreButton(item, vitem)" />
             </div>
           </div>
         </template>
@@ -26,7 +39,7 @@
     </div>
     <div class="source-list-empty" v-else>
       <image src="@/static/no-data.png" class="source-list-empty__img"  />
-      <span class="source-list-empty__tip">{{ t('source.resourceTipAfterAdd') }}</span>
+      <span class="source-list-empty__tip">{{ t('resourceLibrary.emptyTip') }}</span>
       <nut-button :custom-color="primaryBtnColor" @click="toAddFile">
         <template #icon>
           <nut-icon name="uploader" :custom-color="primaryBtnTextColor" size="12"></nut-icon>
@@ -41,25 +54,27 @@
 </template>
 
 <script setup>
+import { clearLibrary } from '@/utils/scrape'
+import { clearAccount } from '@/utils/sources/mulu'
 import { computed, ref } from "vue";
 import wilNavbar from "@/components/mobile/wil-navbar/index.vue";
-import { onShow, onUnload } from "@dcloudio/uni-app";
-import { toParse, toStringfy } from "../mine/common";
-import { loginUser, get189Folder, getQuarkFolder, getWopanFolder, get139Folder } from "@/utils/common";
-import showModal from "@/components/mobile/wil-modal/modal.js";
+import wilIcon from "@/components/common/wil-icon/index.vue";
+import { getSourceIcon } from '@/utils/sources/sourceIcon';
+import { onShow } from "@dcloudio/uni-app";
+import { toStringfy } from "../mine/common";
 import wilModal from "@/components/mobile/wil-modal/index.vue";
-import moreBlack from "@/static/more-black.png";
-import moreWhite from "@/static/more-white.png";
-import moreOrange from "@/static/more-orange.png";
 import { useThemeClass } from '@/hooks/useThemeClass'
 import { useThemeColors } from '@/hooks/useThemeColors'
+import { useThemeTabbar } from '@/hooks/useThemeTabbar'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
 const sourceList = ref([]);
 const selectMedia = ref({});
 const themeClass = useThemeClass()
-const { primaryBtnColor, primaryBtnTextColor, iconColor, isDark } = useThemeColors()
+// 资源库是 tabBar 页，主题/语言变化时要同步底部 tab
+useThemeTabbar()
+const { primaryBtnColor, primaryBtnTextColor, iconColor, iconColorMuted } = useThemeColors()
 
 const show = ref(true);
 const wil_modal = ref(null);
@@ -67,8 +82,7 @@ const wil_modal = ref(null);
 const showBottom = ref(false);
 
 const getOperationList = () => [
-  { key: 'movieDirectory', name: t('source.setMovieDirectory') },
-  { key: 'tvDirectory', name: t('source.setTvDirectory') },
+  // 点卡片进「管理已导入 / 导入新资源」；「...」只放源账号级操作
   { key: 'modify', name: t('common.modify') },
   { key: 'delete', name: t('common.delete') },
 ]
@@ -111,104 +125,20 @@ const toAddFile = () => {
   });
 };
 
-const clearAcitve = () => {
-  sourceList.value.forEach((item) => {
-    item.list.forEach((v) => {
-      v.active = false;
-    });
+/**
+ * 点源卡片：进入该源的「管理已导入资源 / 导入新资源」页。
+ * catelog-mulu 已支持按 type/name 过滤本账号的已导入目录，并提供底部「添加导入目录」。
+ */
+const openManage = (item, vitem) => {
+  // 与移动端既有约定一致。catelog-mulu 的 onLoad 会 decode 一次并按 type/name 精确过滤。
+  uni.navigateTo({
+    url: `/pages/mobile/media/catelog-mulu?type=${encodeURIComponent(item.type)}&name=${encodeURIComponent(vitem.name || '')}`,
   });
-};
+}
 
-const resetSelect = (vitem) => {
-  clearAcitve();
-  vitem.active = true;
-  uni.setStorageSync("isreload", true);
-  uni.setStorageSync("sourceList", sourceList.value);
-  uni.navigateBack();
-};
-
-const handleSelect = (item, vitem) => {
-  wil_modal.value.showModal({
-    title: t('modal.warmTip'),
-    content: t('source.selectResourceConfirm'),
-    confirmColor: "#ff6701",
-    confirm: async () => {
-      if (item.type == "WebDAV") {
-        await loginUser(vitem)
-          .then((res) => {
-            vitem.token = res.data.token;
-            resetSelect(vitem);
-          })
-          .catch((error) => {
-            uni.showToast({
-              title: t('source.pleaseEnableAlist'),
-              icon: "none",
-            });
-          });
-      } else if (item.type == "天翼云盘") {
-        await get189Folder({ folderId: "-11" }, { JSESSIONID: vitem.JSESSIONID, COOKIE_LOGIN_USER: vitem.COOKIE_LOGIN_USER })
-          .then((res) => {
-            if (res.res_code == 0) {
-              resetSelect(vitem);
-            } else {
-              uni.showToast({
-                title: t('source.reloginTianyiCloudDrive'),
-                icon: "none",
-              });
-            }
-          })
-          .catch((error) => {
-            uni.showToast({
-              title: t('source.reloginTianyiCloudDrive'),
-              icon: "none",
-            });
-          });
-      } else if (item.type == "夸克网盘") {
-        await getQuarkFolder({ fid: "0" }, vitem)
-          .then((res) => {
-            if (res.status == 200) {
-              resetSelect(vitem);
-            } else {
-              uni.showToast({
-                title: t('source.reloginQuarkCloudDrive'),
-                icon: "none",
-              });
-            }
-          })
-          .catch((error) => {
-            uni.showToast({
-              title: t('source.reloginQuarkCloudDrive'),
-              icon: "none",
-            });
-          });
-      } else if (item.type == "联通云盘") {
-        await getWopanFolder({ folderId: "0" }, vitem)
-          .then(() => {
-            resetSelect(vitem);
-          })
-          .catch((error) => {
-            uni.showToast({
-              title: t('source.reloginUnicomCloudDrive'),
-              icon: "none",
-            });
-          });
-      } else if (item.type == "移动云盘") {
-        await get139Folder({ folderId: "root" }, vitem)
-          .then(() => {
-            resetSelect(vitem);
-          })
-          .catch((error) => {
-            uni.showToast({
-              title: t('source.reloginCloud139'),
-              icon: "none",
-            });
-          });
-      } else if (item.type == 'Emby') {
-        resetSelect(vitem)
-      }
-    },
-  });
-};
+const toDownload = () => {
+  uni.navigateTo({ url: '/pages/mobile/toolbox/download/index' });
+}
 
 const toShowMoreButton = (item, vitem) => {
   operationList.value = item.type == 'Emby' ? getOperationList().filter(i => ['modify', 'delete'].includes(i.key)) : getOperationList()
@@ -219,15 +149,7 @@ const toShowMoreButton = (item, vitem) => {
 
 const chooseOperation = (item) => {
   const mapping = getMapping()
-  if (item.key == 'movieDirectory') {
-    uni.navigateTo({
-      url: `/pages/mobile/media/catelog-mulu?title=${t('video.movie')}`
-    })
-  } else if (item.key == 'tvDirectory') {
-    uni.navigateTo({
-      url: `/pages/mobile/media/catelog-mulu?title=${t('video.tv')}`
-    })
-  } else if (item.key == 'modify') {
+  if (item.key == 'modify') {
     if (selectType.type == "WebDAV") {
       uni.navigateTo({
         url: mapping[selectType.type].path + "?" + toStringfy(mapping[selectType.type].query) + `&address=${selectMedia.value.address}&isActive=${selectMedia.value.active ? "1" : "0"}`,
@@ -249,8 +171,10 @@ const chooseOperation = (item) => {
       confirm: async () => {
         selectType.list = selectType.list.filter((i) => i.name != selectMedia.value.name);
         uni.setStorageSync("sourceList", sourceList.value);
+        // 同步清掉该账号的导入目录，否则下次同名账号添加会带出脏目录
+        clearAccount({ type: selectType.type, name: selectMedia.value.name });
         if (selectMedia.value.active) {
-          uni.removeStorageSync("localMovieTvData");
+          clearLibrary();
         }
         let historyPlay = uni.getStorageSync("historyPlay");
         historyPlay = historyPlay.filter((v) => v.sourceType != selectType.type || v.sourceName != selectMedia.value.name);
@@ -300,56 +224,77 @@ page {
     }
   }
 
+  // 导航栏右侧：下载 + 加号
+  .navbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 24rpx;
+
+    .navbar-icon {
+      font-size: 40rpx;
+    }
+  }
+
   .source-list-container {
     flex: 1;
     overflow: auto;
-    padding: 0 24rpx;
+    padding: 16rpx 24rpx;
+    box-sizing: border-box;
 
-    .source-list-item {
-      padding-bottom: 16rpx;
+    // 本地下载卡片
+    .download-card {
+      display: flex;
+      align-items: center;
+      gap: 16rpx;
+      background: var(--app-bg-card);
+      border-radius: 16rpx;
+      padding: 24rpx;
+      margin-bottom: 16rpx;
 
-      .source-list-item__title {
-        font-size: 28rpx;
-        color: var(--app-text-tertiary);
-        padding: 16rpx 0;
+      &:active {
+        background: var(--app-bg-secondary);
       }
 
+      &__icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 44rpx;
+      }
+
+      &__name {
+        flex: 1;
+        font-size: 32rpx;
+        color: var(--app-text-primary);
+      }
+    }
+
+    .source-list-item {
+      padding-bottom: 8rpx;
+
+      .source-list-item__title {
+        font-size: 26rpx;
+        color: var(--app-text-tertiary);
+        padding: 16rpx 8rpx 12rpx;
+      }
+
+      // 每个账号一张独立卡片
       .source-list-item__list {
-        background: var(--app-bg-card);
-        border-radius: 14rpx;
+        background: transparent;
+        display: flex;
+        flex-direction: column;
+        gap: 16rpx;
 
         .list-item {
           background: var(--app-bg-card);
-          padding: 6rpx 24rpx;
+          border-radius: 16rpx;
+          padding: 8rpx 24rpx;
           display: flex;
           align-items: center;
           position: relative;
-          border: 2prx solid transparent;
-
-          &::before {
-            position: absolute;
-            content: "";
-            height: 2rpx;
-            background: var(--app-bg-secondary);
-            width: 100%;
-            left: 0;
-            top: 0;
-          }
 
           &:active {
             background: var(--app-bg-secondary);
-          }
-
-          &:first-child {
-            border-radius: 14rpx;
-
-            &::before {
-              display: none;
-            }
-          }
-
-          &:last-child {
-            border-radius: 14rpx;
           }
 
           .list-item-img {
@@ -357,10 +302,8 @@ page {
             height: 100rpx;
             background: url("@/static/source-file.png") center no-repeat;
             background-size: 100% 100%;
-            // display: flex;
-            // align-items: center;
-            // justify-content: center;
             position: relative;
+            flex-shrink: 0;
 
             image {
               width: 40rpx;
@@ -371,35 +314,29 @@ page {
               top: 40%;
               transform: translate(-50%, 0);
             }
+
+            .list-item-glyph {
+              font-size: 40rpx;
+              color: var(--app-icon-strong);
+              position: absolute;
+              left: 50%;
+              top: 40%;
+              transform: translate(-50%, 0);
+            }
           }
 
           .list-item-name {
+            flex: 1;
             padding-left: 10rpx;
             font-size: 32rpx;
             color: var(--app-text-primary);
           }
 
-          .list-item-activeName {
-            color: #ff6701;
-          }
-
           .list-item-button {
-            position: absolute;
-            right: 24rpx;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 42rpx;
-            height: 42rpx;
+            font-size: 42rpx;
+            padding-left: 16rpx;
+            flex-shrink: 0;
           }
-        }
-
-        .list-one {
-          border-radius: 14rpx !important;
-          border: 2rpx solid transparent !important;
-        }
-
-        .list-active {
-          border: 2rpx solid #ff6701 !important;
         }
       }
     }

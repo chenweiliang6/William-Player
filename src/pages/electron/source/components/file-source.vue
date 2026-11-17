@@ -7,10 +7,11 @@
           <template v-for="vitem in item.list" :key="vitem.name">
             <div :class="['list-item', item.list.length == 1 ? 'list-one' : '']" @click="toPath(vitem)" v-if="(vitem.name === 'Emby') === props.isEmby">
               <div class="list-item-img">
-                <img :src="vitem.img" />
+                <image v-if="vitem.img" :src="vitem.img" />
+                <wil-icon v-else :name="vitem.glyph" class="list-item-glyph" />
               </div>
               <div class="list-item-name">{{ vitem.label }}</div>
-              <img :src="theme == 'dark' ? icIntoWhite : icIntoBlack" class="list-item-button" />
+              <wil-icon name="arrow-right" :custom-color="theme == 'dark' ? '#ffffff' : '#000000'" class="list-item-button" />
             </div>
           </template>
         </div>
@@ -21,9 +22,7 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import webdavFileIcon from '@/static/webdav-fileIcon.png'
-import icIntoBlack from '@/static/ic-intoblack.png'
-import icIntoWhite from '@/static/ic-intowhite.png'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 import { onUnload } from '@dcloudio/uni-app'
 import { useI18n } from 'vue-i18n'
 
@@ -42,12 +41,12 @@ const sourceList = computed(() => [
       {
         name: 'WebDAV',
         label: 'WebDAV',
-        img: webdavFileIcon,
+        glyph: 'ziyuanku',
       },
       {
         name: 'Emby',
         label: 'Emby',
-        img: 'https://gimg3.baidu.com/search/src=https%3A%2F%2Ftiebapic.baidu.com%2Fforum%2Fw%253D120%253Bh%253D120%2Fsign%3D44147d7d4e82b2b7a79f3dc60196a3d2%2Fc9fcc3cec3fdfc03771506c1c33f8794a4c2265e.jpg%3Ftbpicau%3D2025-04-08-05_5fe90c457d4356ee146a73914e8a8871&refer=http%3A%2F%2Fwww.baidu.com&app=2021&size=w240&n=0&g=0n&q=75&fmt=auto?sec=1744045200&t=627b5377de1d3107a8a09cb4f65c9fdc',
+        glyph: 'emby',
       },
     ],
   },
@@ -156,6 +155,11 @@ page {
             height: 90rpx;
             border-radius: 50%;
           }
+
+          .list-item-glyph {
+            font-size: 70rpx;
+            color: #666;
+          }
         }
 
         .list-item-name {
@@ -168,8 +172,7 @@ page {
           right: 24rpx;
           top: 50%;
           transform: translateY(-50%);
-          width: 30rpx;
-          height: 30rpx;
+          font-size: 30rpx;
         }
       }
 

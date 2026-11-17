@@ -1,14 +1,15 @@
 <template>
   <div :class="['fileSource', themeClass]">
-    <div class="fileSource-item" v-for="item in sourceList" :key="item.type">
-      <div class="fileSource-item__title">{{ item.type }}</div>
+    <div class="fileSource-item" v-for="item in sourceList" :key="item.title">
+      <div class="fileSource-item__title">{{ item.title }}</div>
       <div class="fileSource-item__list">
-        <div :class="['list-item', item.list.length == 1 ? 'list-one' : '']" v-for="vitem in item.list" :key="vitem.name" @click="toPath(vitem)">
+        <div :class="['list-item', item.list.length == 1 ? 'list-one' : '']" v-for="vitem in item.list" :key="vitem.type" @click="toPath(vitem)">
           <div class="list-item-img">
-            <image :src="vitem.img" />
+            <image v-if="getSourceIcon(vitem.type).kind === 'image'" :src="getSourceIcon(vitem.type).value" />
+            <wil-icon v-else :name="getSourceIcon(vitem.type).value" class="list-item-glyph" />
           </div>
-          <div class="list-item-name">{{ vitem.name }}</div>
-          <image :src="isDark ? icIntoWhite : icIntoBlack" class="list-item-button" />
+          <div class="list-item-name">{{ vitem.label }}</div>
+          <wil-icon name="arrow-right" class="list-item-button icon-theme" />
         </div>
       </div>
     </div>
@@ -17,52 +18,51 @@
 
 <script setup>
 import { computed } from 'vue'
-import webdavFileIcon from '@/static/webdav-fileIcon.png'
-import icIntoBlack from '@/static/ic-intoblack.png'
-import icIntoWhite from '@/static/ic-intowhite.png'
+import wilIcon from '@/components/common/wil-icon/index.vue'
+import { getSourceIcon } from '@/utils/sources/sourceIcon'
 import { toStringfy } from '../mine/common'
 import { useThemeNavbar } from '@/hooks/useThemeNavbar'
 import { useI18nNavbar } from '@/hooks/useI18nNavbar'
 import { useThemeClass } from '@/hooks/useThemeClass'
-import { useThemeColors } from '@/hooks/useThemeColors'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
 useThemeNavbar()
 useI18nNavbar('navbar.addFileSource')
 const themeClass = useThemeClass()
-const { isDark } = useThemeColors()
 
 const sourceList = computed(() => [
   {
-    type: t('source.networkStorage'),
+    title: t('source.networkStorage'),
     list: [
       {
-        name: 'OpenList/Alist',
-        img: webdavFileIcon,
+        // 条目上的 type 用 registry 里的稳定标识，label 才是展示文案：
+        // 图标查表要稳定 key，多语言下才能命中品牌图
+        type: 'WebDAV',
+        label: 'OpenList/Alist',
         path: '/pages/mobile/source/add-webdav',
         query: { title: t('navbar.addWebdav') },
       },
       {
-        name: 'Emby',
-        img: 'https://gimg3.baidu.com/search/src=https%3A%2F%2Ftiebapic.baidu.com%2Fforum%2Fw%253D120%253Bh%253D120%2Fsign%3D44147d7d4e82b2b7a79f3dc60196a3d2%2Fc9fcc3cec3fdfc03771506c1c33f8794a4c2265e.jpg%3Ftbpicau%3D2025-04-08-05_5fe90c457d4356ee146a73914e8a8871&refer=http%3A%2F%2Fwww.baidu.com&app=2021&size=w240&n=0&g=0n&q=75&fmt=auto?sec=1744045200&t=627b5377de1d3107a8a09cb4f65c9fdc',
+        type: 'Emby',
+        label: 'Emby',
         path: '/pages/mobile/source/add-emby',
         query: { title: t('navbar.addEmby') },
       },
     ],
   },
   {
-    type: t('source.cloudStorage'),
+    title: t('source.cloudStorage'),
     list: [
       {
-        name: t('navbar.tianyiCloudDrive'),
-        img: 'https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/8c/87/69/8c8769f2-6bfa-19b2-53a4-9e10a555deb3/AppIcon-0-0-1x_U007emarketing-0-7-0-0-sRGB-85-220.png/350x350.png',
+        type: '天翼云盘',
+        label: t('navbar.tianyiCloudDrive'),
         path: '/pages/mobile/source/add-cloud189',
         query: { title: t('navbar.tianyiCloudDrive') },
       },
       {
-        name: t('navbar.quarkCloudDrive'),
-        img: 'https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/60/6f/e5/606fe5ab-3bfb-c5e4-5bed-08c9b2b5188f/AppIcon-0-0-1x_U007emarketing-0-7-0-0-85-220.png/350x350.png?',
+        type: '夸克网盘',
+        label: t('navbar.quarkCloudDrive'),
         path: '/pages/mobile/backend/quark-webview',
         query: {
           url: 'https://pan.quark.cn',
@@ -70,14 +70,14 @@ const sourceList = computed(() => [
         },
       },
       {
-        name: t('source.unicomCloudDrive'),
-        img: 'https://is1-ssl.mzstatic.com/image/thumb/Purple126/v4/a1/63/38/a16338a7-ba51-498a-5180-7327b46ca2b7/AppIcon-0-0-1x_U007emarketing-0-0-0-0-85-220.png/350x350.png',
+        type: '联通云盘',
+        label: t('source.unicomCloudDrive'),
         path: '/pages/mobile/source/add-wopan',
         query: { title: t('source.unicomCloudDrive') },
       },
       {
-        name: t('source.cloud139Label'),
-        img: 'https://is1-ssl.mzstatic.com/image/thumb/Purple126/v4/a1/63/38/a16338a7-ba51-498a-5180-7327b46ca2b7/AppIcon-0-0-1x_U007emarketing-0-7-0-0-85-220.png/350x350.png',
+        type: '移动云盘',
+        label: t('source.cloud139Label'),
         path: '/pages/mobile/source/add-cloud139',
         query: { title: t('source.cloud139Label') },
       },
@@ -152,6 +152,11 @@ page {
           height: 90rpx;
           position: relative;
 
+          .list-item-glyph {
+            font-size: 70rpx;
+            color: var(--app-icon-strong);
+          }
+
           image {
             width: 90rpx;
             height: 90rpx;
@@ -169,8 +174,7 @@ page {
           right: 24rpx;
           top: 50%;
           transform: translateY(-50%);
-          width: 30rpx;
-          height: 30rpx;
+          font-size: 30rpx;
         }
       }
 

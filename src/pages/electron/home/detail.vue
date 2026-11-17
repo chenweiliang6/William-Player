@@ -1,10 +1,13 @@
 <template>
   <div class="detail">
+    <!-- 详情数据未就绪时展示骨架屏，避免进入详情页时空白 -->
+    <video-detail-skeleton v-if="!hasDetail" />
+    <template v-else>
     <div class="detail-background">
       <img :src="imgData.img" />
-      <div class="detail-background-overlay"></div>
+      <div class="detail-background-overlay" :style="overlayStyle"></div>
     </div>
-    <div class="detail-content">
+    <div class="detail-content" :style="contentVars">
       <wil-title :title="route.query.title"></wil-title>
       <div class="detail-info">
         <div class="detail-info-img">
@@ -14,15 +17,15 @@
           <div class="detail-info-right__name">{{ imgData.title }}</div>
           <div class="detail-info-right__mid">
             <div class="mid-score">
-              <img src="@/static/star-fill.png" />
+              <wil-icon name="shoucang" custom-color="#f4bc22" />
               <span>{{ imgData.score }}</span>
             </div>
             <div class="mid-date">
-              <img src="@/static/date-icon.png" />
+              <wil-icon name="rili" :custom-color="palette?.dark ? '#ffffff' : '#000000'" />
               <span>{{ imgData.releaseTime }}</span>
             </div>
             <div class="mid-runtime">
-              <img src="@/static/clock-icon.png" v-if="routerParams.type == 'movie'" />
+              <wil-icon name="shijian" :custom-color="palette?.dark ? '#ffffff' : '#000000'" v-if="routerParams.type == 'movie'" />
               <span>{{ imgData.runtime }}</span>
             </div>
           </div>
@@ -33,14 +36,14 @@
             <span v-if="routerParams.type == 'movie'" class="genre-size">{{ selectSource.size }}</span>
           </div>
           <div class="detail-info-right__button">
-            <nut-button custom-color="#090909" @click="clickPlayButton">
+            <nut-button :custom-color="palette?.text || '#090909'" @click="clickPlayButton">
               <template #icon>
-                <image src="@/static/play.png" />
+                <wil-icon name="icon_play" :custom-color="palette?.dark ? '#000000' : '#ffffff'" />
               </template>
-              <span>{{ buttonText }}</span>
+              <span :style="{ color: palette?.bg || '#ffffff' }">{{ buttonText }}</span>
             </nut-button>
-            <div class="button-more">
-              <img src="@/static/gengduo-white.png" />
+            <div class="button-more" @click="toSearchMatch">
+              <wil-icon name="gengduo" :custom-color="palette?.dark ? '#ffffff' : '#000000'" />
             </div>
           </div>
           <div class="detail-info-right__overview">
@@ -50,7 +53,7 @@
             <div class="platform-list">
               <div class="platform-list-item" v-for="item in imgData.networks" :key="item.id">
                 <img :src="IMG_DOMAIN + '/t/p/h30' + item.logo_path" v-if="item.logo_path" class="container-item-img" mode="heightFix" />
-                <text v-else :style="{ fontSize: setSize('32rpx'), color: '#000' }">{{ item.name }}</text>
+                <text v-else :style="{ fontSize: setSize('32rpx'), color: palette?.text || '#000' }">{{ item.name }}</text>
               </div>
             </div>
           </div>
@@ -69,16 +72,16 @@
         </div>
         <div class="detail-container-tabs" v-if="route.query.type === 'tv'">
           <div class="detail-container-tabs__list">
-            <nut-tabs v-model="activeSeason.season" :title-scroll="true" custom-color="#090909" background="#fff" @change="changeTvSeason">
+            <nut-tabs v-model="activeSeason.season" :title-scroll="true" :custom-color="palette?.text || '#090909'" :background="palette?.bg || '#fff'" @change="changeTvSeason">
               <nut-tab-pane :title="item.name" :pane-key="item.season" v-for="item in selectSource.seasonArr" :key="item.season"></nut-tab-pane>
             </nut-tabs>
           </div>
           <div class="detail-container-tabs__arrow">
             <div class="arrow-left" @click="slideTv('left')">
-              <img src="@/static/rect-leftblack.png" />
+              <wil-icon name="arrow-left-copy" :custom-color="palette?.dark ? '#ffffff' : '#000000'" />
             </div>
             <div class="arrow-right" @click="slideTv('right')">
-              <img src="@/static/rect-leftblack.png" />
+              <wil-icon name="arrow-right" :custom-color="palette?.dark ? '#ffffff' : '#000000'" />
             </div>
           </div>
         </div>
@@ -95,7 +98,7 @@
           >
             <div class="tv-list-item" v-for="(item, index) in tvList" :id="'name' + (index + 1)" :key="item.name" @click="toPlayVideo(item, index)">
               <div class="item-img" :style="{ backgroundImage: `url(${item.poster})` }">
-                <img src="@/static/playVideo-button.png" />
+                <wil-icon name="icon_play" custom-color="#ffffff" class="item-img-play" />
                 <span class="item-img-runtime" v-if="item.runtime">{{ item.runtime }}</span>
                 <div
                   class="item-img-process"
@@ -112,9 +115,11 @@
           :routerParams="routerParams"
           :selectSource="{ ...selectSource, size: routerParams.type == 'movie' ? selectSource.size : tvList[0]?.size }"
           :imgData="imgData"
+          :iconTone="palette?.iconTone || 'black'"
         ></actor-list>
       </div>
     </div>
+    </template>
   </div>
 </template>
 
@@ -123,10 +128,14 @@ import { useRoute, useRouter } from 'vue-router'
 import { useVideoDetail } from '@/hooks/useVideoDetail'
 import { onBeforeMount } from 'vue'
 import * as CONFIG from '@/utils/config'
-import { ref } from 'vue'
-import { debounce, parseTime } from '@/utils/scrape'
+import { ref, computed } from 'vue'
+import { useDominantColor } from '@/hooks/useDominantColor'
+import { posterPalette } from '@/utils/dominantColor'
+import { debounce, parseTime, getMovieTvData, findInView } from '@/utils/scrape'
 import actorList from './components/actor-list.vue'
+import VideoDetailSkeleton from '@/components/common/video-detail-skeleton.vue'
 import wilTitle from '@/components/electron/wil-title/index.vue'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 import { IMG_DOMAIN } from '@/utils/config'
 import { useI18n } from 'vue-i18n'
 
@@ -145,6 +154,8 @@ const {
   pickerColumns,
   imgData,
   overview,
+  hasDetail,
+  seasonSwitching,
   sourceList,
   selectSource,
   activeSeason,
@@ -166,6 +177,24 @@ const {
   toPlayVideo,
   reHandleTv,
 } = useVideoDetail({ route, router })
+
+// 背景蒙层用海报主色纯色，文字/按钮按主色明暗自动反色
+const { rawColor } = useDominantColor(computed(() => imgData.value.img))
+const palette = computed(() => posterPalette(rawColor.value))
+const overlayStyle = computed(() => (palette.value ? { background: palette.value.bg } : undefined))
+const contentVars = computed(() => {
+  const p = palette.value
+  return p
+    ? {
+        '--content-text': p.text,
+        '--content-text-secondary': p.textSecondary,
+        '--content-text-tertiary': p.textTertiary,
+        '--content-border': p.border,
+        '--content-surface': p.surface,
+        '--content-surface-strong': p.surfaceStrong,
+      }
+    : {}
+})
 
 const setScrollIntoView = debounce(direction => {
   handleSilde(direction)
@@ -203,14 +232,28 @@ const slideTv = direction => {
   nowTime = time
 }
 
+// 手动修正匹配：带 workKey + 类型 + 片名进搜索匹配页
+const toSearchMatch = () => {
+  router.push({
+    path: '/searchMatch',
+    query: {
+      type: route.query.type,
+      workKey: route.query.workKey || '',
+      query: encodeURIComponent(imgData.value.title || route.query.name || ''),
+    },
+  })
+}
+
 onBeforeMount(() => {
-  const localMovieTvData = uni.getStorageSync('localMovieTvData') || {}
-  if (route.query.type === 'tv') {
-    scrollIntoView.value = 'name1'
-    nowMovieTv.value = localMovieTvData.tv.find(i => i.movieTvId == route.query.movieTvId)
-  } else if (route.query.type === 'movie') {
-    nowMovieTv.value = localMovieTvData.movie.find(i => i.movieTvId == route.query.movieTvId)
-  }
+  const localMovieTvData = getMovieTvData() || {}
+  if (route.query.type === 'tv') scrollIntoView.value = 'name1'
+  // 走统一 helper：按类型选列表 + workKey 优先 + 判空
+  nowMovieTv.value = findInView(localMovieTvData, {
+    mediaType: route.query.type,
+    tmdbId: route.query.movieTvId,
+    workKey: route.query.workKey,
+    path: route.query.path,
+  }) || {}
 })
 </script>
 
@@ -230,6 +273,7 @@ onBeforeMount(() => {
     background-position: center;
     background-repeat: no-repeat;
     background-size: cover;
+    overflow: hidden;
 
     img {
       width: 100%;
@@ -241,10 +285,10 @@ onBeforeMount(() => {
       z-index: 1;
     }
 
+    // 蒙层默认白色半透明，取色成功后由行内样式覆盖为海报主色
     .detail-background-overlay {
       width: 100%;
       height: 100%;
-      // background: rgba(0, 0, 0, 0.8);
       background: rgba(255, 255, 255, 0.7);
       position: absolute;
       left: 0;
@@ -260,6 +304,7 @@ onBeforeMount(() => {
     position: relative;
     z-index: 2;
     padding-bottom: 60rpx;
+    color: var(--content-text, #000);
 
     .detail-info {
       z-index: 2;
@@ -297,11 +342,10 @@ onBeforeMount(() => {
             display: flex;
             align-items: center;
             font-size: 30rpx;
-            color: #000;
+            color: var(--content-text, #000);
 
-            img {
-              width: 40rpx;
-              height: 40rpx;
+            .iconfont {
+              font-size: 40rpx;
             }
           }
 
@@ -309,25 +353,23 @@ onBeforeMount(() => {
             display: flex;
             align-items: center;
             font-size: 30rpx;
-            color: #000;
+            color: var(--content-text, #000);
             margin-left: 24rpx;
 
-            img {
-              width: 40rpx;
-              height: 40rpx;
+            .iconfont {
+              font-size: 40rpx;
             }
           }
 
           .mid-runtime {
             margin-left: 24rpx;
             font-size: 30rpx;
-            color: #000;
+            color: var(--content-text, #000);
             display: flex;
             align-items: center;
 
-            img {
-              width: 40rpx;
-              height: 40rpx;
+            .iconfont {
+              font-size: 40rpx;
             }
           }
         }
@@ -343,7 +385,8 @@ onBeforeMount(() => {
             margin-left: 14rpx;
           }
           .genre-value {
-            background: rgb(240, 240, 240);
+            background: var(--content-surface, rgb(240, 240, 240));
+            color: var(--content-text, #000);
             padding: 10rpx 24rpx;
             border-radius: 16rpx;
             margin-left: 24rpx;
@@ -378,7 +421,7 @@ onBeforeMount(() => {
             width: 80rpx;
             height: 80rpx;
             border-radius: 50%;
-            background: #090909;
+            background: var(--content-surface-strong, #090909);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -415,7 +458,8 @@ onBeforeMount(() => {
             flex-wrap: wrap;
             width: 100%;
             .platform-list-item {
-              background: rgb(240, 240, 240);
+              background: var(--content-surface, rgb(240, 240, 240));
+              color: var(--content-text, #000);
               width: auto;
               display: flex;
               align-items: center;
@@ -449,11 +493,11 @@ onBeforeMount(() => {
 
         .source-item {
           font-size: 28rpx;
-          color: #000;
+          color: var(--content-text, #000);
           font-weight: bold;
           padding: 12rpx 24rpx;
           border-radius: 8rpx;
-          border: 2rpx solid #000;
+          border: 2rpx solid var(--content-border, #000);
           margin-left: 12rpx;
           white-space: nowrap;
           cursor: pointer;
@@ -464,8 +508,8 @@ onBeforeMount(() => {
         }
 
         .source-active {
-          color: #315ffd;
-          border: 2rpx solid #315ffd;
+          color: var(--app-brand);
+          border: 2rpx solid var(--app-brand);
         }
       }
 
@@ -497,7 +541,7 @@ onBeforeMount(() => {
                 }
 
                 .nut-tabs-active {
-                  color: #090909;
+                  color: var(--content-text, #090909);
 
                   .nut-tabs__titles-item__line {
                     width: 100%;
@@ -593,9 +637,8 @@ onBeforeMount(() => {
               position: relative;
               overflow: hidden;
 
-              img {
-                width: 60rpx;
-                height: 60rpx;
+              .item-img-play {
+                font-size: 60rpx;
                 position: absolute;
                 left: 50%;
                 top: 50%;
@@ -624,7 +667,7 @@ onBeforeMount(() => {
 
             .item-title {
               font-size: 28rpx;
-              color: #000;
+              color: var(--content-text, #000);
               font-weight: bold;
               padding-top: 12rpx;
               width: 100%;

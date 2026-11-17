@@ -1,8 +1,9 @@
+import { getMovieTvData } from '@/utils/scrape'
 import { ref, nextTick, onMounted } from "vue";
 import { onShow, onLoad } from "@dcloudio/uni-app";
 import emptyBg from "@/static/empty_bg.png";
 import { toStringfy } from "../pages/mobile/mine/common";
-import { handleSeasonName, handleSecond, parseTime } from "@/utils/scrape.js";
+import { handleSeasonName, handleSecond, parseTime } from "@/utils/scrape";
 import posterEmpty from "@/static/poster-empty.png";
 import * as CONFIG from "@/utils/config";
 import { getEmbyList, getGenresList } from "../utils/emby";
@@ -111,9 +112,12 @@ export function useHistoryPlayed({ wil_list, wil_modal }) {
                     });
                 }
             } else if (item.type == "tv") {
-                let localMovieTvData = uni.getStorageSync("localMovieTvData") || {};
+                let localMovieTvData = getMovieTvData() || {};
                 const lastIndex = item.path.lastIndexOf("/");
-                let nowTv = localMovieTvData.tv.find((i) => i.name == item.titlePlay && i.path == "/" + item.path.slice(0, lastIndex));
+                // 历史记录没有 workKey，只能按「剧名 + 目录路径」定位。
+                // 库被重刮/条目被删时可能查不到，旧写法直接取属性会抛错导致
+                // 续播按钮整个失灵；查不到就当没有片头片尾设置，照常播放。
+                let nowTv = localMovieTvData.tv.find((i) => i.name == item.titlePlay && i.path == "/" + item.path.slice(0, lastIndex)) || {};
                 let openEndTime = {};
                 nowTv.openingTime >= 0 ? (openEndTime.openingTime = nowTv.openingTime) : "";
                 nowTv.endTime >= 0 ? (openEndTime.endTime = nowTv.endTime) : "";

@@ -1,33 +1,41 @@
 <template>
   <div class="catelog-mulu">
-    <div class="catelog-mulu-title">{{ t('source.directorySettingTitle', { title: catalogTypeLabel }) }}</div>
+    <div class="catelog-mulu-title">{{ t('folderPicker.manage') }}</div>
     <div class="catelog-mulu-container">
-      <nut-swipe v-for="(item, index) in listData" :key="item.name" :ref="el => setRefs(el, index)">
-        <div :class="['list-item', index === tabIndex ? 'list-active' : '']">
+      <!-- 复用扁平列表：媒体库条目在前，仅资源库在后，用 group 标记区分 -->
+      <nut-swipe v-for="(item, index) in listData" :key="item.type ? item.name + item.path : 'add'" :ref="el => setRefs(el, index)">
+        <!-- 分组标题（新增按钮也走这里） -->
+        <div v-if="item.isGroup" class="group-title">{{ item.label }}</div>
+        <div v-else-if="item.isAdd" :class="['catelog-mulu-add', index === tabIndex ? 'catelog-mulu-add_active' : '']" @click="toSelectMulu">
+          <wil-icon name="jia"></wil-icon>
+        </div>
+        <div v-else :class="['list-item', index === tabIndex ? 'list-active' : '']">
           <div class="item-left">
             <div class="item-left-icon">
-              <image :src="mapping[item.type]"></image>
+              <image v-if="getSourceIcon(item.type).kind === 'image'" :src="getSourceIcon(item.type).value"></image>
+              <wil-icon v-else :name="getSourceIcon(item.type).value" class="item-left-glyph"></wil-icon>
             </div>
             <div class="item-left-text">
               <span>{{ item.name }}</span>
               <span>{{ item.path }}</span>
+              <span v-if="item.inheritChildren" class="badge">{{ t('folderPicker.inheritBadge') }}</span>
             </div>
           </div>
           <div class="item-right">
-            <image src="@/static/sx-gd.png"></image>
+            <wil-icon name="sx-gd-copy"></wil-icon>
           </div>
         </div>
         <template #right>
           <div class="swipe-button">
             <div :class="['swipe-button-delete', iconIndex === 0 ? 'swipe-button-active' : '']">
-              <image src="@/static/swipe-sc.png"></image>
+              <wil-icon name="wenjianjia" custom-color="#c5c6d0"></wil-icon>
+            </div>
+            <div :class="['swipe-button-delete', iconIndex === 1 ? 'swipe-button-active' : '']">
+              <wil-icon name="shanchu" custom-color="#c5c6d0"></wil-icon>
             </div>
           </div>
         </template>
       </nut-swipe>
-    </div>
-    <div :class="['catelog-mulu-add', tabIndex === listData.length ? 'catelog-mulu-add_active' : '']" @click="toSelectMulu">
-      <image src="@/static/jia-hao.png"></image>
     </div>
   </div>
 </template>
@@ -35,49 +43,45 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import webdavFileIcon from '@/static/webdav-fileIcon.png'
+import wilIcon from '@/components/common/wil-icon/index.vue'
+import { getSourceIcon } from '@/utils/sources/sourceIcon'
 import { onShow } from '@dcloudio/uni-app'
+import { readMulu, removeEntry, addEntries, TARGET } from '@/utils/sources/mulu'
 
-const props = defineProps({
-  title: { type: String, default: '' },
-  catalogType: { type: String, default: 'tv' },
-})
 const { t } = useI18n()
 
 const emits = defineEmits(['changeShowType'])
 
-const mapping = {
-  'WebDAV': webdavFileIcon,
-  '天翼云盘':
-    'https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/8c/87/69/8c8769f2-6bfa-19b2-53a4-9e10a555deb3/AppIcon-0-0-1x_U007emarketing-0-7-0-0-sRGB-85-220.png/350x350.png',
-  '夸克网盘':
-    'https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/60/6f/e5/606fe5ab-3bfb-c5e4-5bed-08c9b2b5188f/AppIcon-0-0-1x_U007emarketing-0-7-0-0-85-220.png/350x350.png?',
-  '联通云盘':
-    'https://is1-ssl.mzstatic.com/image/thumb/Purple126/v4/a1/63/38/a16338a7-ba51-498a-5180-7327b46ca2b7/AppIcon-0-0-1x_U007emarketing-0-0-0-0-85-220.png/350x350.png',
-  '移动云盘':
-    'https://is1-ssl.mzstatic.com/image/thumb/Purple126/v4/a1/63/38/a16338a7-ba51-498a-5180-7327b46ca2b7/AppIcon-0-0-1x_U007emarketing-0-7-0-0-85-220.png/350x350.png',
-}
-const getCatalogType = value => {
-  if (['tv', '电视剧', t('video.tv'), t('navbar.tvCatelogSetting')].includes(value)) return 'tv'
-  if (['movie', '电影', t('video.movie'), t('navbar.movieCatelogSetting')].includes(value)) return 'movie'
-  return 'tv'
-}
-const catalogType = computed(() => getCatalogType(props.catalogType || props.title))
-const catalogTypeLabel = computed(() => (catalogType.value === 'tv' ? t('video.tv') : t('video.movie')))
 
 const tabIndex = ref(0)
-const muluData = ref({})
-const listData = ref([])
+const entries = ref([])
 const itemRefs = ref([])
 const isSwipe = ref(false) //标识当前是否有swipe被打开
 const iconIndex = ref(-1) //表示swipe右侧的那些图标的索引
 
-//获取存在本地的目录数据
+/**
+ * 扁平化成「分组标题 + 条目 + 新增按钮」的列表，
+ * 让遥控器只需在一维数组上上下移动，不用处理二维分组导航。
+ */
+const listData = computed(() => {
+  const media = entries.value.filter(e => (e.target || TARGET.MEDIA) === TARGET.MEDIA)
+  const resource = entries.value.filter(e => e.target === TARGET.RESOURCE)
+  const rows = []
+  if (media.length) {
+    rows.push({ isGroup: true, label: t('folderPicker.mediaGroup') })
+    rows.push(...media)
+  }
+  if (resource.length) {
+    rows.push({ isGroup: true, label: t('folderPicker.resourceGroup') })
+    rows.push(...resource)
+  }
+  if (!rows.length) rows.push({ isGroup: true, label: t('folderPicker.noImport') })
+  rows.push({ isAdd: true })
+  return rows
+})
+
 const getMuluData = () => {
-  muluData.value = uni.getStorageSync('muluData') || {}
-  if (!muluData.value.tv) muluData.value.tv = []
-  if (!muluData.value.movie) muluData.value.movie = []
-  listData.value = muluData.value[catalogType.value]
+  entries.value = readMulu().entries || []
 }
 
 //为每个swipe设置ref
@@ -85,59 +89,99 @@ const setRefs = (el, index) => {
   itemRefs.value[index] = el
 }
 
+// TV 端没有「当前账号」上下文，跳导入页时由用户在页面内自行选择源账号。
+// 这里同样是调整既有目录，用 edit 模式回填，才能取消已导入目录。
 const toSelectMulu = () => {
   uni.navigateTo({
-    url: `/pages/tv/source/catelog-settings?catalogType=${catalogType.value}`,
+    url: '/pages/tv/source/folder-picker?mode=edit',
   })
+}
+
+const currentRow = () => listData.value[tabIndex.value]
+
+/**
+ * 在「媒体库」与「仅资源库」之间切换。
+ * 不走 removeEntry：条目要留着供资源库浏览，也不能冲掉播放历史。
+ */
+const switchTarget = row => {
+  const isMedia = (row.target || TARGET.MEDIA) === TARGET.MEDIA
+  const next = isMedia ? TARGET.RESOURCE : TARGET.MEDIA
+  addEntries({
+    type: row.type,
+    name: row.name,
+    picked: [{ path: row.path, folderFileId: row.folderFileId, inheritChildren: row.inheritChildren }],
+    target: next,
+  })
+  uni.setStorageSync('isreload', true)
+  uni.showToast({
+    title: isMedia ? t('folderPicker.switchedToResource') : t('folderPicker.switchedToMedia'),
+    icon: 'none',
+  })
+  isSwipe.value = false
+  iconIndex.value = -1
+  getMuluData()
+}
+
+/** 移动焦点时跳过不可选的分组标题 */
+const moveTo = delta => {
+  let next = tabIndex.value + delta
+  const max = listData.value.length - 1
+  next = Math.max(0, Math.min(max, next))
+  // 分组标题不可聚焦
+  while (next > 0 && next < max && listData.value[next]?.isGroup) {
+    next += delta
+  }
+  tabIndex.value = Math.max(0, Math.min(max, next))
 }
 
 //遥控器按键事件
 const evtMove = keyCode => {
   if (keyCode === 'KeyUp') {
-    if (tabIndex.value > 0) {
-      tabIndex.value < listData.value.length ? itemRefs.value[tabIndex.value].close() : ''
-      tabIndex.value--
-      isSwipe.value = false
-      iconIndex.value = -1
-    }
+    itemRefs.value[tabIndex.value]?.close?.()
+    isSwipe.value = false
+    iconIndex.value = -1
+    moveTo(-1)
   } else if (keyCode === 'KeyDown') {
-    if (tabIndex.value < listData.value.length) {
-      itemRefs.value[tabIndex.value].close()
-      tabIndex.value++
-      isSwipe.value = false
-      iconIndex.value = -1
-    }
+    itemRefs.value[tabIndex.value]?.close?.()
+    isSwipe.value = false
+    iconIndex.value = -1
+    moveTo(1)
   } else if (keyCode === 'KeyLeft') {
-    // if (tabIndex.value === listData.value.length) return
     if (isSwipe.value) {
-      if (iconIndex.value > 0) {
-        iconIndex.value--
-      } else {
-        isSwipe.value = false
-        itemRefs.value[tabIndex.value].close()
-        iconIndex.value--
-      }
+      // 侧滑已打开：在「切换 / 删除」两个按钮之间移动
+      iconIndex.value = Math.max(0, iconIndex.value - 1)
     } else {
       emits('changeShowType', 'settings')
     }
   } else if (keyCode === 'KeyRight') {
-    if (tabIndex.value === listData.value.length) return
-    if (!isSwipe.value) {
-      isSwipe.value = true
-      itemRefs.value[tabIndex.value].open('left')
-    } else {
-      iconIndex.value < 0 ? iconIndex.value++ : ''
+    const row = currentRow()
+    if (!row || row.isGroup || row.isAdd) return
+    if (isSwipe.value) {
+      iconIndex.value = Math.min(1, iconIndex.value + 1)
+      return
     }
+    isSwipe.value = true
+    itemRefs.value[tabIndex.value]?.open?.('left')
+    iconIndex.value = 0
   } else if (keyCode === 'KeyEnter') {
-    if (tabIndex.value === listData.value.length) {
+    const row = currentRow()
+    if (!row) return
+    if (row.isAdd) {
       toSelectMulu()
-    } else {
-      if (iconIndex.value == 0) {
-        //删除目录
-        listData.value = listData.value.filter(item => item.name !== listData.value[tabIndex.value].name||item.path !== listData.value[tabIndex.value].path)
-        muluData.value[catalogType.value] = listData.value
-        uni.setStorageSync('muluData', muluData.value)
-      }
+      return
+    }
+    if (row.isGroup) return
+    if (!isSwipe.value) return
+    if (iconIndex.value === 0) {
+      // 切换「媒体库 / 仅资源库」
+      switchTarget(row)
+    } else if (iconIndex.value === 1) {
+      // 删除
+      removeEntry({ type: row.type, name: row.name, path: row.path })
+      if ((row.target || TARGET.MEDIA) === TARGET.MEDIA) uni.setStorageSync('isreload', true)
+      isSwipe.value = false
+      iconIndex.value = -1
+      getMuluData()
     }
   }
 }
@@ -175,6 +219,12 @@ defineExpose({
     padding: 24rpx;
     width: 100%;
 
+    .group-title {
+      font-size: 26rpx;
+      color: #8a8a8a;
+      padding: 20rpx 8rpx 10rpx;
+    }
+
     :deep(.nut-swipe) {
       .nut-swipe__content {
         .list-item {
@@ -195,110 +245,47 @@ defineExpose({
                 height: 80rpx;
                 border-radius: 50%;
               }
+
+              .item-left-glyph {
+                font-size: 80rpx;
+                color: #fff;
+              }
             }
 
             .item-left-text {
-              margin-left: 24rpx;
-              color: #c5c6d0;
-              font-weight: bold;
-              font-size: 34rpx;
               display: flex;
               flex-direction: column;
+              padding-left: 20rpx;
+              color: #fff;
 
-              span:last-child {
-                margin-top: 12rpx;
-                display: block;
-                font-size: 26rpx;
-                color: #707070;
+              .badge {
+                font-size: 22rpx;
+                color: #ff6701;
               }
-            }
-          }
-
-          .item-right {
-            width: 30rpx;
-            height: 30rpx;
-
-            image {
-              width: 30rpx;
-              height: 30rpx;
             }
           }
         }
 
         .list-active {
-          background: #e5e6ec;
-
-          .item-left {
-            .item-left-text {
-              color: #000015;
-            }
-          }
-        }
-      }
-
-      .nut-swipe__right {
-        .swipe-button {
-          display: flex;
-          align-items: center;
-          justify-content: space-around;
-          height: 100%;
-          width: 150rpx;
-
-          .swipe-button-edit {
-            padding: 10rpx;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border: 4rpx solid transparent;
-
-            image {
-              width: 40rpx;
-              height: 40rpx;
-            }
-          }
-
-          .swipe-button-delete {
-            padding: 10rpx;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border: 4rpx solid transparent;
-
-            image {
-              width: 40rpx;
-              height: 40rpx;
-            }
-          }
-
-          .swipe-button-active {
-            border: 4rpx solid #e5e6ec;
-            border-radius: 50%;
-          }
+          outline: 4rpx solid #ff6701;
         }
       }
     }
   }
 
   .catelog-mulu-add {
-    background: #3d4758;
-    border-radius: 50%;
-    width: 80rpx;
-    height: 80rpx;
-    flex: 0 0 80rpx;
     display: flex;
     align-items: center;
     justify-content: center;
-    cursor: pointer;
-    border: 4rpx solid transparent;
+    padding: 30rpx;
 
-    image {
-      width: 30rpx;
-      height: 30rpx;
+    &_active {
+      outline: 4rpx solid #ff6701;
     }
-  }
 
-  .catelog-mulu-add_active {
-    border: 4rpx solid #e5e6ec;
+    .iconfont {
+      font-size: 60rpx;
+    }
   }
 }
 </style>

@@ -7,15 +7,15 @@
           <div class="img-title">{{ imgData.title }}</div>
           <div class="img-mid" v-if="imgData.releaseTime">
             <div class="img-mid-score">
-              <image src="@/static/star-fill.png"  />
+              <wil-icon name="shoucang" custom-color="#f4bc22" />
               <span>{{ imgData.score }}</span>
             </div>
             <div class="img-mid-date">
-              <image src="@/static/date-icon.png"  />
+              <wil-icon name="rili" />
               <span>{{ imgData.releaseTime }}</span>
             </div>
             <div class="img-mid-runtime">
-              <image src="@/static/clock-icon.png" v-if="routerParams.type == 'movie'"  />
+              <wil-icon name="shijian" v-if="routerParams.type == 'movie'" />
               <span>{{ imgData.runtime }}</span>
             </div>
           </div>
@@ -25,12 +25,12 @@
           </div>
         </div>
       </div>
-      <div class="emby-detail-container__content">
-        <nut-button :custom-color="primaryBtnColor" @click="clickPlayButton">
+      <div class="emby-detail-container__content" :style="posterContentStyle">
+        <nut-button :custom-color="palette?.text || primaryBtnColor" @click="clickPlayButton">
           <template #icon>
-            <image src="/static/play.png"  />
+            <wil-icon name="icon_play" :custom-color="palette?.dark ? '#000015' : '#ffffff'" />
           </template>
-          <span :style="{ color: primaryBtnTextColor }">{{ buttonText }}</span>
+          <span :style="{ color: palette?.bg || primaryBtnTextColor }">{{ buttonText }}</span>
         </nut-button>
         <!-- 电影专用 -->
         <div class="movie-version" v-if="routerParams.type == 'movie'">
@@ -43,7 +43,13 @@
             <div class="tv-version-tabs__cloud">
               <div class="tv-version-tabs__cloud-item">Emby</div>
             </div>
-            <nut-tabs v-model="activeSeason.season" :title-scroll="true" :custom-color="iconColor" background="var(--app-bg)" @change="changeTvSeason">
+            <nut-tabs
+              v-model="activeSeason.season"
+              :title-scroll="true"
+              :custom-color="palette?.text || iconColor"
+              :background="palette?.bg || 'var(--app-bg)'"
+              @change="changeTvSeason"
+            >
               <nut-tab-pane :title="item.name" :pane-key="item.season" v-for="item in seasonArr" :key="item.season"></nut-tab-pane>
             </nut-tabs>
             <div class="tv-version-tabs__disabled" v-if="!tvList.length && !showRehandleButton" @click="disabledTip"></div>
@@ -61,7 +67,7 @@
           >
             <div class="tv-version-list__item" v-for="(item, index) in tvList" :id="'name' + (index + 1)" :key="item.name" @click="toPlayVideo(item, index)">
               <div class="item-img" :style="{ backgroundImage: `url(${item.poster})` }">
-                <image src="@/static/playVideo-button.png"  />
+                <wil-icon name="icon_play" custom-color="#ffffff" class="item-img-play" />
                 <span class="item-img-runtime" v-if="item.runtime">{{ item.runtime }}</span>
                 <div
                   class="item-img-process"
@@ -73,7 +79,9 @@
             </div>
           </scroll-view>
           <div class="tv-version-empty" v-else>
-            <nut-button :custom-color="primaryBtnColor" v-if="showRehandleButton" @click="reHandleTv"><span :style="{ color: primaryBtnTextColor }">{{ t('video.reload') }}</span></nut-button>
+            <nut-button :custom-color="palette?.text || primaryBtnColor" v-if="showRehandleButton" @click="reHandleTv">
+              <span :style="{ color: palette?.bg || primaryBtnTextColor }">{{ t('video.reload') }}</span>
+            </nut-button>
             <span v-else>{{ t('common.loadingEllipsis') }}</span>
           </div>
         </div>
@@ -83,7 +91,7 @@
           :actorArr="actorArr"
           type="emby"
           v-if="showActor"
-          :selectSource="{ name: imgData.title, path: imgData.path, sourceName: 'Emby', size: null }"
+          :selectSource="selectSource"
           :imgData="{ ...imgData, overview: overview }"
         ></actor-list>
       </div>
@@ -95,6 +103,7 @@
 import { computed, ref, onBeforeMount, nextTick, watch } from 'vue'
 import { onShow, onLoad } from '@dcloudio/uni-app'
 import wilNavbar from '@/components/mobile/wil-navbar/index.vue'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 import actorList from '../components/detail-component/actor-list.vue'
 import { getEmbyMovieTv, getEmbySeasonList, getEmbyList, setEmbyImg, getSeasonTvList } from '@/utils/emby'
 import { parseTime, calTime, formatNanoseconds, handleSecond, handleSeasonName, generateChineseNumberMapping } from '@/utils/scrape'
@@ -102,12 +111,34 @@ import { useThemeClass } from '@/hooks/useThemeClass'
 import { useThemeColors } from '@/hooks/useThemeColors'
 import { useI18n } from 'vue-i18n'
 import { useLocaleStore } from '@/stores/locale'
+import { useDominantColor } from '@/hooks/useDominantColor'
+import { posterPalette } from '@/utils/dominantColor'
 
 const { t } = useI18n()
 const localeStore = useLocaleStore()
 const themeClass = useThemeClass()
 const { primaryBtnColor, primaryBtnTextColor, iconColor } = useThemeColors()
 const imgData = ref({}) //图片内的信息
+
+// 演员/集数等共享的“来源描述”，模板与 setButtonText 共用同一份
+const selectSource = computed(() => ({ name: imgData.value.title, path: imgData.value.path, sourceName: 'Emby', size: null }))
+
+// 海报下方区域用海报主色纯色铺底，文字按主色明暗自动反色
+const { rawColor } = useDominantColor(computed(() => imgData.value.img))
+const palette = computed(() => posterPalette(rawColor.value))
+const posterContentStyle = computed(() => {
+  const p = palette.value
+  return p
+    ? {
+        background: p.bg,
+        '--content-text': p.text,
+        '--content-text-secondary': p.textSecondary,
+        '--content-text-tertiary': p.textTertiary,
+        '--content-border': p.border,
+      }
+    : {}
+})
+
 const overview = ref('') //剧情简介
 const actor_list = ref(null)
 const activeSeason = ref({})
@@ -459,9 +490,8 @@ page {
               align-items: center;
               padding: 16rpx 24rpx;
 
-              image {
-                width: 40rpx;
-                height: 40rpx;
+              .iconfont {
+                font-size: 40rpx;
               }
 
               .more-popover-item__text {
@@ -549,9 +579,8 @@ page {
               transform: translateY(-50%);
             }
 
-            image {
-              width: 32rpx;
-              height: 32rpx;
+            .iconfont {
+              font-size: 32rpx;
             }
 
             span {
@@ -580,9 +609,9 @@ page {
               transform: translateY(-50%);
             }
 
-            image {
-              width: 28rpx;
-              height: 28rpx;
+            .iconfont {
+              font-size: 28rpx;
+              color: #c2c5c6;
             }
 
             span {
@@ -598,9 +627,9 @@ page {
             padding: 0 14rpx;
             height: 40rpx;
 
-            image {
-              width: 28rpx;
-              height: 28rpx;
+            .iconfont {
+              font-size: 28rpx;
+              color: #c2c5c6;
             }
 
             span {
@@ -651,6 +680,9 @@ page {
     .emby-detail-container__content {
       padding: 24rpx 24rpx 0 24rpx;
       padding-bottom: 100rpx;
+      background: var(--app-bg);
+      // 取色成功时由行内样式覆盖为主色，文字一并反色
+      color: var(--content-text, var(--app-text-primary));
 
       ::v-deep .nut-button {
         width: 100%;
@@ -658,9 +690,8 @@ page {
         height: 100rpx;
 
         .nut-button__wrap {
-          image {
-            width: 30rpx;
-            height: 30rpx;
+          .iconfont {
+            font-size: 30rpx;
           }
 
           .nut-button__text {
@@ -675,7 +706,7 @@ page {
         .movie-version-title {
           font-size: 32rpx;
           font-weight: bold;
-          color: var(--app-text-primary);
+          color: var(--content-text, var(--app-text-primary));
           padding-bottom: 20rpx;
         }
 
@@ -739,7 +770,7 @@ page {
               }
 
               .nut-tabs-active {
-                color: var(--app-text-primary);
+                color: var(--content-text, var(--app-text-primary));
 
                 .nut-tabs__titles-item__line {
                   width: 100%;
@@ -827,9 +858,8 @@ page {
               position: relative;
               overflow: hidden;
 
-              image {
-                width: 60rpx;
-                height: 60rpx;
+              .item-img-play {
+                font-size: 60rpx;
                 position: absolute;
                 left: 50%;
                 top: 50%;
@@ -858,7 +888,7 @@ page {
 
             .item-title {
               font-size: 28rpx;
-              color: var(--app-text-primary);
+              color: var(--content-text, var(--app-text-primary));
               font-weight: bold;
               padding-top: 12rpx;
               width: 100%;

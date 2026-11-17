@@ -5,14 +5,14 @@
     </div>
     <div class="recent-played-list">
       <tv-scroll class="recent-played-list-scroll" style="width: 100%" :scrollIntoView="scrollIntoView">
-        <div class="recent-played-list-movie__item" v-for="(item, index) in scrollData" :key="item.name"
+        <div class="recent-played-list-movie__item" v-for="(item, index) in scrollData" :key="item.name + (item.type || '')"
           @click="toVideoPlayer(item)">
           <div class="recent-played-list-movie__item-img" :class="[tabIndex == index ? 'img-active' : '']">
             <image :src="item.poster" style="width: 100%;height: 100%;position: static;" mode="aspectFill"></image>
             <span style="color: red;font-size: 30px;">
               {{ item.loadImg }}
             </span>
-            <image :src="playVideoButton" class="img-button" />
+            <wil-icon name="icon_play" custom-color="#ffffff" class="img-button" />
             <span class="img-runtime">{{ handleSecond(item.initialTime) + '/' + item.runtime }}</span>
             <div class="img-process"
               :style="{ width: Number(item.initialTime) / (Number(parseTime(item.runtime)) * 0.6) + '%' }"></div>
@@ -30,8 +30,8 @@
 <script setup>
 import { ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import playVideoButton from "@/static/playVideo-button.png";
-import { handleSecond, parseTime, handleSeasonName, debounce } from "@/utils/scrape";
+import wilIcon from "@/components/common/wil-icon/index.vue";
+import { handleSecond, parseTime, handleSeasonName, debounce, getMovieTvData } from "@/utils/scrape";
 import { onShow } from "@dcloudio/uni-app";
 import emptyBg from "@/static/empty_bg.png";
 import { toStringfy } from "@/pages/mobile/mine/common";
@@ -43,6 +43,8 @@ const props = defineProps({
   isFocus: { type: Boolean, default: true },
   listData: { type: Array, default: [] },
   offsetTop: { type: Number, default: 0 },
+  // 下移目标：第一个可见的分类分区（父组件按焦点序列算好）
+  nextFocus: { type: String, default: '' },
 });
 
 const emits = defineEmits(['setFocus'])
@@ -124,7 +126,7 @@ const toVideoPlayer = async (item) => {
       });
     }
   } else if (item.type == "tv") {
-    let localMovieTvData = uni.getStorageSync("localMovieTvData") || {};
+    let localMovieTvData = getMovieTvData() || {};
     let nowTv = localMovieTvData.tv.find((i) => {
       return (
         i.source.some((v) => {
@@ -156,18 +158,12 @@ const toVideoAll = () => {
   });
 };
 //获取上下的组件
+// 下移目标由父组件按焦点序列算好传入，不再按 movie→tv 硬编码
 const getUpDown = (direction) => {
   if (direction === "up") {
     return "starRecommend";
-  } else if (direction === 'down') {
-    let localMovieTvData = uni.getStorageSync("localMovieTvData");
-    if (localMovieTvData?.movie?.length) {
-      return "hxMovie";
-    }
-    if (localMovieTvData?.tv?.length) {
-      return "hxTv";
-    }
   }
+  return props.nextFocus || "";
 }
 
 let nowTime = 0;
@@ -322,13 +318,11 @@ defineExpose({
 
 
             .img-button {
-              width: 80rpx;
-              height: 80rpx;
+              font-size: 80rpx;
               position: absolute;
               left: 50%;
               top: 50%;
               transform: translate(-50%, -50%);
-              object-fit: cover;
             }
 
             .img-runtime {

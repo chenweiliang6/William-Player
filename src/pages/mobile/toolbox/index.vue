@@ -4,7 +4,8 @@
     <div class="toolbox-container">
       <div class="toolbox-container-list">
         <div class="list-item" v-for="item in toolboxArr" :key="item.key" @click="clickItem(item)">
-          <image class="list-item-logo" :src="item.icon" />
+          <image v-if="item.iconURL" class="list-item-logo" :src="item.iconURL" />
+          <wil-icon v-else class="list-item-logo" :name="item.icon" custom-color="#ff6701" />
           <span>{{ item.title }}</span>
         </div>
         <!-- <div @click="handleChat">点击进入</div> -->
@@ -15,6 +16,7 @@
 
 <script setup>
 import wilNavbar from '@/components/mobile/wil-navbar/index.vue'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 import expressSearch from '@/static/express-search.png'
 import downloadIcon from '@/static/download-manage.png'
 import { toStringfy, toParse } from '@/pages/mobile/mine/common'
@@ -30,12 +32,12 @@ const { t } = useI18n()
 useI18nNavbar('navbar.toolbox')
 
 const toolboxArr = computed(() => [
-  { key: 'downloadManagement', title: t('navbar.downloadManagement'), icon: downloadIcon, path: '/pages/mobile/toolbox/download/index' },
-  { key: 'expressSearch', title: t('navbar.expressSearch'), icon: expressSearch, path: '/pages/mobile/toolbox/express/search' },
+  { key: 'downloadManagement', title: t('navbar.downloadManagement'), iconURL: downloadIcon, path: '/pages/mobile/toolbox/download/index' },
+  { key: 'expressSearch', title: t('navbar.expressSearch'), iconURL: expressSearch, path: '/pages/mobile/toolbox/express/search' },
   {
     key: 'tongyiQianwen',
     title: t('toolbox.tongyiQianwenShort'),
-    icon: 'https://appstoreimg-ipv6.vivo.com.cn/appstore/developer/icon/20260218/rs7abhxe/2026021810452118kcz.webp',
+    iconURL: 'https://appstoreimg-ipv6.vivo.com.cn/appstore/developer/icon/20260218/rs7abhxe/2026021810452118kcz.webp',
     path: '/pages/mobile/backend/index',
     query: {
       url: 'https://www.qianwen.com/',
@@ -45,7 +47,7 @@ const toolboxArr = computed(() => [
   {
     key: 'todayOilPrice',
     title: t('toolbox.todayOilPrice'),
-    icon: 'https://appimg-drcn.dbankcdn.com/application/icon144/950609aee81d49c38d3c5f1ad5fd5e87.png',
+    iconURL: 'https://appimg-drcn.dbankcdn.com/application/icon144/950609aee81d49c38d3c5f1ad5fd5e87.png',
     path: '/pages/mobile/backend/index',
     query: {
       url: 'https://cx.sinopecsales.com/yjkqiantai/core/initCpb',
@@ -55,7 +57,7 @@ const toolboxArr = computed(() => [
   {
     key: 'weatherForecast',
     title: t('toolbox.weatherForecast'),
-    icon: 'https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/77/a8/3e/77a83e97-f088-b8f9-71cc-9cf395deae1c/AppIcon-0-0-1x_U007emarketing-0-8-0-0-85-220.png/350x350.png',
+    iconURL: 'https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/77/a8/3e/77a83e97-f088-b8f9-71cc-9cf395deae1c/AppIcon-0-0-1x_U007emarketing-0-8-0-0-85-220.png/350x350.png',
     path: '/pages/mobile/backend/index',
     query: {
       url: 'https://html5.moji.com/tpd/mojiweatheraggr/index.html#/home',
@@ -65,7 +67,7 @@ const toolboxArr = computed(() => [
   {
     key: 'cliQrCode',
     title: t('toolbox.cliQrCode'),
-    icon: 'https://tmpic.tmkoo.com/407b6f44964ededc967541ee3bb13223?v=2022',
+    iconURL: 'https://tmpic.tmkoo.com/407b6f44964ededc967541ee3bb13223?v=2022',
     path: '/pages/mobile/backend/index',
     query: {
       url: 'https://cli.im/',
@@ -75,13 +77,13 @@ const toolboxArr = computed(() => [
   {
     key: 'syncWatch',
     title: t('toolbox.syncWatch'),
-    icon: 'https://cdn.jsdelivr.net/gh/synctv-org/docs@main/logo/logo.png',
+    iconURL: 'https://cdn.jsdelivr.net/gh/synctv-org/docs@main/logo/logo.png',
     path: 'https://synctv.mofashi.ltd/web/',
   },
   {
     key: 'xiachufang',
     title: t('toolbox.xiachufang'),
-    icon: 'http://file.market.xiaomi.com/thumbnail/PNG/l62/AppStore/0fd2845f926424d67a95aa14402d2ff14fca354d4',
+    iconURL: 'http://file.market.xiaomi.com/thumbnail/PNG/l62/AppStore/0fd2845f926424d67a95aa14402d2ff14fca354d4',
     path: '/pages/mobile/backend/index',
     query: {
       url: 'https://m.xiachufang.com/',
@@ -91,7 +93,7 @@ const toolboxArr = computed(() => [
   {
     key: 'trafficQuery',
     title: t('toolbox.trafficQuery'),
-    icon: 'https://appstoreimg-ipv6.vivo.com.cn/appstore/developer/icon/20251130/4mfwmxop/202511302251297qv4p.webp',
+    iconURL: 'https://appstoreimg-ipv6.vivo.com.cn/appstore/developer/icon/20251130/4mfwmxop/202511302251297qv4p.webp',
     path: '/pages/mobile/backend/index',
     query: {
       url: '',
@@ -101,13 +103,13 @@ const toolboxArr = computed(() => [
   {
     key: 'aiQa',
     title: t('navbar.aiQa'),
-    icon: 'https://appstoreimg-ipv6.vivo.com.cn/appstore/developer/icon/20231211/xnof23rl/202312111204047yhfu.webp',
+    iconURL: 'https://appstoreimg-ipv6.vivo.com.cn/appstore/developer/icon/20231211/xnof23rl/202312111204047yhfu.webp',
     path: '/pages/mobile/toolbox/chat/index',
   },
   {
     key: 'newApi',
     title: 'NewApi',
-    icon: 'https://api.gemai.cc/logo.png',
+    iconURL: 'https://api.gemai.cc/logo.png',
     path: '/pages/mobile/backend/index',
     query: {
       url: CONFIG.BASE_URL.split(':4040')[0] + ':3001',
@@ -200,6 +202,10 @@ page {
           width: 90rpx;
           height: 90rpx;
           border-radius: 50%;
+        }
+
+        .iconfont {
+          font-size: 90rpx;
         }
 
         span {

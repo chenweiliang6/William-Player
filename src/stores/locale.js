@@ -76,8 +76,9 @@ export const useLocaleStore = defineStore('locale', {
       const t = this.i18n.global.t
       const items = [
         { index: 0, text: t('tabBar.mediaLibrary') },
-        { index: 1, text: t('tabBar.live') },
-        { index: 2, text: t('tabBar.mine') },
+        { index: 1, text: t('tabBar.resourceLibrary') },
+        { index: 2, text: t('tabBar.live') },
+        { index: 3, text: t('tabBar.mine') },
       ]
       let hasFailed = false
       const tasks = items.map(item => {

@@ -123,6 +123,11 @@ export const login189 = async ({ validateCode = '' } = {}) => {
     const submitBody = typeof submitRes.data === 'string' ? JSON.parse(submitRes.data) : submitRes.data
     toUrl = submitBody.toUrl || ''
     errMsg = submitBody.msg || ''
+    // 189 风控常在 msg 里给「刷新页面后重试」(result=-20000)，
+    // 通常是短时间内反复登录或登录页参数与提交会话不匹配，重试一次往往能过。
+    if (!toUrl && submitBody.result === -20000) {
+      throw new Error('189pc 登录被风控拦截（-20000），请等待 1-2 分钟后重试，或先在官方网页确认账号可正常登录')
+    }
   } finally {
     // 对齐 Go：一次提交后销毁登录参数
     loginParam = null

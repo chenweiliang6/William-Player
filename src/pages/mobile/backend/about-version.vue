@@ -8,7 +8,7 @@
     <div class="about-version-wrapper">
       <div class="about-version-container">
         <div class="about-version-container__main">
-          <image src="@/static/app-logo1.png" @click="toLogin"  />
+          <image src="@/static/app-logo1.png" @click="toLogin" />
           <div class="main-name">
             <span>William Player</span>
             <span>{{ appVersion }}</span>
@@ -18,7 +18,7 @@
         <nut-cell :title="t('backend.autoCheckUpdate')" :desc="status[0]" :is-link="true" @click="showPopover = true"></nut-cell>
       </div>
       <div class="about-version-protocol">
-        <image src="@/static/tmdb-xy.png"  />
+        <image src="@/static/tmdb-xy.png" />
         <div class="about-version-protocol__button" @click="toQQpage">{{ t('backend.contactUs') }}</div>
         <div class="about-version-protocol__other" @click="toOtherPage">{{ t('backend.downloadOtherPlatformVersion') }}</div>
         <!-- <div class="about-version-protocol__tip">@2024-至今，由chenweiliang6开发并开源，仅用于学习和使用，不可用于商用</div> -->
@@ -30,7 +30,9 @@
           </template>
           {{ t('backend.checkUpdate') }}
         </nut-button>
-        <nut-button disabled :custom-color="isDark ? '#3a3a3d' : '#dedde3'" v-else><span :style="{ color: disabledBtnTextColor }">{{ t('backend.currentLatestVersion') }}</span></nut-button>
+        <nut-button disabled :custom-color="isDark ? '#3a3a3d' : '#dedde3'" v-else>
+          <span :style="{ color: disabledBtnTextColor }">{{ t('backend.currentLatestVersion') }}</span>
+        </nut-button>
       </div>
       <nut-popup v-model:visible="showPopover" round position="bottom" safe-area-inset-bottom>
         <nut-picker v-model="status" :columns="popoverList" title="" @confirm="confirm" @cancel="showPopover = false" />
@@ -61,9 +63,6 @@ import wilNavbar from '@/components/mobile/wil-navbar/index.vue'
 import { useThemeClass } from '@/hooks/useThemeClass'
 import { useThemeColors } from '@/hooks/useThemeColors'
 import wilShareSheet from '@/components/mobile/wil-share-sheet/index.vue'
-import weiboIcon from '@/static/weibo-icon.png'
-import copyLink from '@/static/copy-link.png'
-import moreIcon from '@/static/more-icon.png'
 import saveImage from '@/static/save-image.png'
 import { useI18n } from 'vue-i18n'
 import { useI18nNavbar } from '@/hooks/useI18nNavbar'

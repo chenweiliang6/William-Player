@@ -7,7 +7,7 @@
           <div class="more-arrow"></div>
           <div class="more-popover">
             <div class="more-popover-item" @click="toSelect(item)" v-for="item in popoverArr" :key="item.text">
-              <image :src="item.icon" />
+              <wil-icon :name="item.icon" class="more-popover-item__icon" />
               <span class="more-popover-item__text">{{ item.text }}</span>
             </div>
           </div>
@@ -15,21 +15,23 @@
         <nut-overlay v-model:visible="showPopover" :z-index="2000" :lock-scroll="true"></nut-overlay>
       </template>
     </wil-navbar>
-    <div class="video-detail-container">
+    <!-- 详情数据未就绪时展示骨架屏，避免长时间白屏 -->
+    <video-detail-skeleton v-if="!hasDetail" />
+    <div v-else class="video-detail-container" :class="{ 'is-switching': seasonSwitching }">
       <div class="video-detail-container__img" :style="{ backgroundImage: `url(${imgData.img})` }">
         <div class="img-container">
           <div class="img-title">{{ imgData.title }}</div>
           <div class="img-mid" v-if="imgData.releaseTime">
             <div class="img-mid-score">
-              <image src="@/static/star-fill.png" />
+              <wil-icon name="shoucang" custom-color="#f4bc22" />
               <span>{{ imgData.score }}</span>
             </div>
             <div class="img-mid-date">
-              <image src="@/static/date-icon.png" />
+              <wil-icon name="rili" />
               <span>{{ imgData.releaseTime }}</span>
             </div>
             <div class="img-mid-runtime">
-              <image src="@/static/clock-icon.png" v-if="routerParams.type == 'movie'" />
+              <wil-icon name="shijian" v-if="routerParams.type == 'movie'" />
               <span>{{ imgData.runtime }}</span>
             </div>
           </div>
@@ -39,19 +41,20 @@
           </div>
         </div>
       </div>
-      <div class="video-detail-container__content">
-        <nut-button :custom-color="primaryBtnColor" @click="clickPlayButton">
+      <div class="video-detail-container__content" :style="posterContentStyle">
+        <nut-button :custom-color="palette?.text || primaryBtnColor" @click="clickPlayButton">
           <template #icon>
-            <image src="@/static/play.png" />
+            <!-- 原先是 play-black/play-white 两张图按封面主色调切换，现在同一个字形只换颜色 -->
+            <wil-icon name="icon_play" :custom-color="palette?.dark ? '#000015' : '#ffffff'" />
           </template>
-          <span :style="{ color: primaryBtnTextColor }">{{ buttonText }}</span>
+          <span :style="{ color: palette?.bg || primaryBtnTextColor }">{{ buttonText }}</span>
         </nut-button>
         <!-- 电影专用 -->
         <div class="movie-version" v-if="routerParams.type == 'movie'">
           <div class="movie-version-title">
             <span>{{ t('video.movieVersion') }}</span>
             <div class="movie-version-title__download" @click="downloadMovie">
-              <nut-icon name="download" :custom-color="iconColor" size="18"></nut-icon>
+              <wil-icon name="xiazai" :style="{ color: palette?.text || iconColor }" />
               <span>{{ t('video.download') }}</span>
             </div>
           </div>
@@ -82,12 +85,18 @@
               </div>
             </div>
             <div class="tv-version-tabs__season">
-              <nut-tabs v-model="activeSeason.season" :title-scroll="true" :custom-color="iconColor" background="var(--app-bg)" @change="changeTvSeason">
+              <nut-tabs
+                v-model="activeSeason.season"
+                :title-scroll="true"
+                :custom-color="palette?.text || iconColor"
+                :background="palette?.bg || 'var(--app-bg)'"
+                @change="changeTvSeason"
+              >
                 <nut-tab-pane :title="item.name" :pane-key="item.season" v-for="item in selectSource.seasonArr" :key="item.season"></nut-tab-pane>
               </nut-tabs>
               <div class="tv-version-tabs__season-viewAll" @click="openTvListPopup">
                 <span>{{ t('video.viewAll') }}</span>
-                <nut-icon name="rect-right" :custom-color="iconColor" size="14"></nut-icon>
+                <nut-icon name="rect-right" :custom-color="palette?.text || iconColor" size="14"></nut-icon>
               </div>
             </div>
             <div class="tv-version-tabs__disabled" v-if="!tvList.length && !showRehandleButton" @click="disabledTip"></div>
@@ -105,7 +114,7 @@
           >
             <div class="tv-version-list__item" v-for="(item, index) in tvList" :id="'name' + item.ji" :key="item.name" @click="toPlayVideo(item, index)">
               <div class="item-img" :style="{ backgroundImage: `url(${item.poster})` }">
-                <image src="@/static/playVideo-button.png" />
+                <wil-icon name="icon_play" custom-color="#ffffff" class="item-img-play" />
                 <span class="item-img-runtime" v-if="item.runtime">{{ item.runtime }}</span>
                 <div
                   class="item-img-process"
@@ -117,8 +126,8 @@
             </div>
           </scroll-view>
           <div class="tv-version-empty" v-else>
-            <nut-button :custom-color="primaryBtnColor" v-if="showRehandleButton" @click="reHandleTv">
-              <span :style="{ color: primaryBtnTextColor }">{{ t('video.reload') }}</span>
+            <nut-button :custom-color="palette?.text || primaryBtnColor" v-if="showRehandleButton" @click="reHandleTv">
+              <span :style="{ color: palette?.bg || primaryBtnTextColor }">{{ t('video.reload') }}</span>
             </nut-button>
             <span v-else>{{ t('common.loadingEllipsis') }}</span>
           </div>
@@ -152,10 +161,15 @@ import { useDict } from '@/utils/useDict'
 import { parseTime } from '@/utils/scrape'
 import { useVideoDetail } from '@/hooks/useVideoDetail'
 import tvlistPopup from './components/detail-component/tvlist-popup.vue'
+import VideoDetailSkeleton from '@/components/common/video-detail-skeleton.vue'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 import { ref } from 'vue'
 import { useThemeClass } from '@/hooks/useThemeClass'
 import { useThemeColors } from '@/hooks/useThemeColors'
 import { useI18n } from 'vue-i18n'
+import { computed } from 'vue'
+import { useDominantColor } from '@/hooks/useDominantColor'
+import { posterPalette } from '@/utils/dominantColor'
 
 const { t } = useI18n()
 const { getUntokenDict } = useDict()
@@ -178,6 +192,8 @@ const {
   tvList,
   buttonText,
   routerParams,
+  hasDetail,
+  seasonSwitching,
   showRehandleButton,
   historyTv,
   scrollIntoView,
@@ -194,6 +210,22 @@ const {
   reHandleTv,
   downloadMovie,
 } = useVideoDetail({})
+
+// 海报下方区域用海报主色纯色铺底，文字按主色明暗自动反色
+const { rawColor } = useDominantColor(computed(() => imgData.value.img))
+const palette = computed(() => posterPalette(rawColor.value))
+const posterContentStyle = computed(() => {
+  const p = palette.value
+  return p
+    ? {
+        background: p.bg,
+        '--content-text': p.text,
+        '--content-text-secondary': p.textSecondary,
+        '--content-text-tertiary': p.textTertiary,
+        '--content-border': p.border,
+      }
+    : {}
+})
 
 //打开电视剧集列表popup
 const openTvListPopup = () => {
@@ -233,6 +265,7 @@ page {
   height: 100%;
   box-sizing: border-box;
   background: var(--app-bg);
+  transition: background var(--app-duration-slow) var(--app-ease);
 
   ::v-deep .wil-navbar {
     .nut-navbar {
@@ -274,9 +307,9 @@ page {
               align-items: center;
               padding: 16rpx 24rpx;
 
-              image {
-                width: 40rpx;
-                height: 40rpx;
+              .more-popover-item__icon {
+                font-size: 40rpx;
+                color: var(--app-text-primary);
               }
 
               .more-popover-item__text {
@@ -302,6 +335,14 @@ page {
 
   .video-detail-container {
     height: 100%;
+    // 季/版本切换时内容淡出淡入，避免硬切。
+    // 只动 opacity，不动 transform —— 否则会和 scroll-with-animation 的滚动定位打架。
+    opacity: 1;
+    transition: opacity var(--app-duration-fast) var(--app-ease);
+
+    &.is-switching {
+      opacity: 0.35;
+    }
 
     .video-detail-container__img {
       width: 100%;
@@ -315,17 +356,7 @@ page {
       box-sizing: border-box;
       position: relative;
 
-      &::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.1);
-        z-index: 1;
-      }
-
+      // 海报原图直显，仅留底部黑色渐变衬底保证叠加文字可读
       .img-container {
         background: linear-gradient(to bottom, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.4) 100%);
         padding: 0 24rpx 30rpx 24rpx;
@@ -364,7 +395,7 @@ page {
               transform: translateY(-50%);
             }
 
-            image {
+            .iconfont {
               width: 32rpx;
               height: 32rpx;
             }
@@ -395,9 +426,8 @@ page {
               transform: translateY(-50%);
             }
 
-            image {
-              width: 28rpx;
-              height: 28rpx;
+            .iconfont {
+              color: #c2c5c6;
             }
 
             span {
@@ -413,9 +443,8 @@ page {
             padding: 0 14rpx;
             height: 40rpx;
 
-            image {
-              width: 28rpx;
-              height: 28rpx;
+            .iconfont {
+              color: #c2c5c6;
             }
 
             span {
@@ -466,6 +495,9 @@ page {
     .video-detail-container__content {
       padding: 24rpx 24rpx 0 24rpx;
       padding-bottom: 100rpx;
+      background: var(--app-bg);
+      // 取色成功时由行内样式覆盖为主色，文字一并反色
+      color: var(--content-text, var(--app-text-primary));
 
       ::v-deep .nut-button {
         width: 100%;
@@ -473,9 +505,8 @@ page {
         height: 100rpx;
 
         .nut-button__wrap {
-          image {
-            width: 30rpx;
-            height: 30rpx;
+          .iconfont {
+            font-size: 30rpx;
           }
 
           .nut-button__text {
@@ -490,7 +521,7 @@ page {
         .movie-version-title {
           font-size: 32rpx;
           font-weight: bold;
-          color: var(--app-text-primary);
+          color: var(--content-text, var(--app-text-primary));
           padding-bottom: 20rpx;
           display: flex;
           align-items: center;
@@ -498,9 +529,8 @@ page {
           .movie-version-title__download {
             display: flex;
             align-items: center;
-            image {
-              width: 34rpx;
-              height: 34rpx;
+            .iconfont {
+              font-size: 34rpx;
             }
             span {
               font-size: 28rpx;
@@ -517,11 +547,11 @@ page {
 
             .movie-version-list__item {
               font-size: 28rpx;
-              color: var(--app-text-primary);
+              color: var(--content-text, var(--app-text-primary));
               font-weight: bold;
               padding: 12rpx 24rpx;
               border-radius: 8rpx;
-              border: 2rpx solid var(--app-border-strong);
+              border: 2rpx solid var(--content-border, var(--app-border-strong));
               margin-left: 12rpx;
               white-space: nowrap;
 
@@ -552,11 +582,11 @@ page {
 
             .tv-version-tabs__cloud-item {
               font-size: 28rpx;
-              color: var(--app-text-primary);
+              color: var(--content-text, var(--app-text-primary));
               font-weight: bold;
               padding: 12rpx 24rpx;
               border-radius: 8rpx;
-              border: 2rpx solid var(--app-border-strong);
+              border: 2rpx solid var(--content-border, var(--app-border-strong));
               margin-left: 12rpx;
               white-space: nowrap;
 
@@ -591,7 +621,7 @@ page {
                   }
 
                   .nut-tabs-active {
-                    color: var(--app-text-primary);
+                    color: var(--content-text, var(--app-text-primary));
 
                     .nut-tabs__titles-item__line {
                       width: 100%;
@@ -612,13 +642,13 @@ page {
               span {
                 font-size: 28rpx;
                 font-weight: bold;
-                color: var(--app-text-primary);
+                color: var(--content-text, var(--app-text-primary));
               }
               :deep(.nut-icon) {
                 font-size: 28rpx;
                 width: 28rpx;
                 height: 28rpx;
-                color: var(--app-text-primary);
+                color: var(--content-text, var(--app-text-primary));
                 &::before {
                   font-size: 28rpx;
                 }
@@ -677,6 +707,31 @@ page {
             margin-left: 24rpx;
             flex: 0 0 calc((100% - (var(--line-number) - 1) * 24rpx) / var(--line-number));
             overflow: hidden;
+            position: relative;
+            transition: opacity var(--app-duration-fast) var(--app-ease);
+
+            // 按压反馈：暗色遮罩，与海报墙卡片保持一致
+            &::after {
+              content: '';
+              position: absolute;
+              top: 0;
+              left: 0;
+              width: 100%;
+              height: 100%;
+              border-radius: 12rpx;
+              background: rgba(0, 0, 0, 0.18);
+              opacity: 0;
+              transition: opacity var(--app-duration-fast) var(--app-ease);
+              pointer-events: none;
+            }
+
+            &:active::after {
+              opacity: 1;
+            }
+
+            &:active {
+              opacity: 0.92;
+            }
 
             &:first-child {
               margin-left: 0;
@@ -694,9 +749,8 @@ page {
               position: relative;
               overflow: hidden;
 
-              image {
-                width: 60rpx;
-                height: 60rpx;
+              .item-img-play {
+                font-size: 60rpx;
                 position: absolute;
                 left: 50%;
                 top: 50%;
@@ -725,7 +779,7 @@ page {
 
             .item-title {
               font-size: 28rpx;
-              color: var(--app-text-primary);
+              color: var(--content-text, var(--app-text-primary));
               font-weight: bold;
               padding-top: 12rpx;
               width: 100%;

@@ -1,5 +1,6 @@
 // 联通云盘凭据存储：token 落库 sourceList（参照 cloud189/store.js 的 persist189Token 模式）
 import { addOperLog } from '@/network/apis'
+import { renameAccount } from '@/utils/sources/mulu'
 
 export const WOPAN_SOURCE_TYPE = '联通云盘'
 
@@ -24,12 +25,8 @@ export const persistWopanToken = (tokenInfo, { isActive } = {}) => {
       let historyArr = uni.getStorageSync('historyPlay') || []
       historyArr = historyArr.filter(v => v.sourceType != WOPAN_SOURCE_TYPE || v.sourceName != oldName)
       uni.setStorageSync('historyPlay', historyArr)
-      const muluData = uni.getStorageSync('muluData')
-      if (muluData) {
-        muluData.movie?.forEach(v => { v.list = v.list?.filter(m => m.sourceName != oldName || m.sourceType != WOPAN_SOURCE_TYPE) })
-        muluData.tv?.forEach(v => { v.list = v.list?.filter(m => m.sourceName != oldName || m.sourceType != WOPAN_SOURCE_TYPE) })
-        uni.setStorageSync('muluData', muluData)
-      }
+      // 原先这里操作的是不存在的 v.list 字段，等于账号改名后目录配置没跟着改
+      renameAccount(WOPAN_SOURCE_TYPE, oldName, loginName)
     }
     wopan.list = [
       {
@@ -47,7 +44,7 @@ export const persistWopanToken = (tokenInfo, { isActive } = {}) => {
         name: loginName,
         accessToken: tokenInfo.accessToken,
         refreshToken: tokenInfo.refreshToken,
-        active: isActive ? '1' : '0',
+        active: !!isActive,
       },
     ]
   }

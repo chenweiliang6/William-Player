@@ -5,7 +5,7 @@
         <div class="swiper-content" @click="toVideoDetail(data)">
           <div class="swiper-content-container">
             <div class="swiper-content-left">
-              <image mode="aspectFill" :src="CONFIG.IMG_DOMAIN + '/t/p/w300_and_h450_bestv2' + data.poster"  />
+              <image mode="aspectFill" :src="CONFIG.IMG_DOMAIN + '/t/p/w300_and_h450_bestv2' + data.poster" />
             </div>
             <div class="swiper-content-right">
               <div class="right-genres">{{ data.genres }}</div>
@@ -13,7 +13,7 @@
               <div class="right-info">
                 <div class="right-info-date">{{ data.releaseTime }}</div>
                 <div class="right-info-star">
-                  <image src="@/static/star-fill.png"  />
+                  <wil-icon name="shoucang" custom-color="#f4bc22" />
                   <span>{{ data.voteAverage.toFixed(1) }}</span>
                 </div>
               </div>
@@ -27,49 +27,50 @@
 </template>
 
 <script setup>
-import wilSwiper from "@/components/mobile/wil-swiper/index.vue";
-import { ref, watch } from "vue";
-import { classifyList, handleSeasonName } from "@/utils/scrape";
-import { onShow } from "@dcloudio/uni-app";
-import * as CONFIG from "@/utils/config";
+import wilSwiper from '@/components/mobile/wil-swiper/index.vue'
+import wilIcon from '@/components/common/wil-icon/index.vue'
+import { ref, watch } from 'vue'
+import { classifyList, handleSeasonName, getMovieTvData } from '@/utils/scrape'
+import { onShow } from '@dcloudio/uni-app'
+import * as CONFIG from '@/utils/config'
 import { useI18n } from 'vue-i18n'
 import { useLocaleStore } from '@/stores/locale'
 
 const { t } = useI18n()
 const localeStore = useLocaleStore()
-const listData = ref([]);
+const listData = ref([])
 const navBarHeight = ref('')
-const removeExtension = (filename) => {
-  let name = handleSeasonName(filename, true);
+const removeExtension = filename => {
+  let name = handleSeasonName(filename, true)
   if (name.length > 7) {
-    name = name.slice(0, 6) + "...";
+    name = name.slice(0, 6) + '...'
   }
-  return name;
-};
+  return name
+}
 
-const toVideoDetail = (item) => {
+const toVideoDetail = item => {
   uni.navigateTo({
-    url: `/pages/mobile/video/video-detail?path=${item.path}&name=${handleSeasonName(item.name, true)}&type=${item.type}&source=${JSON.stringify(item.source)}&movieTvId=${item.movieTvId}`,
-  });
-};
+    url: `/pages/mobile/video/video-detail?path=${item.path}&name=${handleSeasonName(item.name, true)}&type=${item.type}&source=${JSON.stringify(item.source)}&movieTvId=${item.movieTvId}&workKey=${encodeURIComponent(item.workKey || '')}`,
+  })
+}
 
 //计算设备navBar高度
 const getNavHeight = () => {
-  let sysinfo = uni.getSystemInfoSync(); // 获取设备系统对象
-  let statusBarHeight = sysinfo.statusBarHeight; // 获取状态栏高度
-  navBarHeight.value = statusBarHeight + 44 + 'px'; //计算nav导航栏的高度
-};
+  let sysinfo = uni.getSystemInfoSync() // 获取设备系统对象
+  let statusBarHeight = sysinfo.statusBarHeight // 获取状态栏高度
+  navBarHeight.value = statusBarHeight + 44 + 'px' //计算nav导航栏的高度
+}
 
 //计算h5的navBar高度
 const getH5NavbarHeight = () => {
-  navBarHeight.value = '44px';
-};
+  navBarHeight.value = '44px'
+}
 // #ifdef H5
-getH5NavbarHeight();
+getH5NavbarHeight()
 // #endif
 
 // #ifndef H5
-getNavHeight();
+getNavHeight()
 // #endif
 const getGenreText = genreId => {
   const genre = classifyList.find(item => item.id == genreId)
@@ -77,55 +78,55 @@ const getGenreText = genreId => {
 }
 
 const getRecommendList = () => {
-  let localMovieTvData = uni.getStorageSync("localMovieTvData") || {};
-  let tv = [];
+  let localMovieTvData = getMovieTvData() || {}
+  let tv = []
   if (localMovieTvData?.tv) {
-    tv = localMovieTvData.tv.filter((v) => v.voteAverage).sort((a, b) => b.voteAverage - a.voteAverage);
-    tv = tv.slice(0, 3).map((item) => {
-      let genres = "";
-      item.type = "tv";
+    tv = localMovieTvData.tv.filter(v => v.voteAverage).sort((a, b) => b.voteAverage - a.voteAverage)
+    tv = tv.slice(0, 3).map(item => {
+      let genres = ''
+      item.type = 'tv'
       item.genre_ids?.forEach((v, vindex) => {
         if (vindex < item.genre_ids.length - 1) {
-          genres += getGenreText(v) ? getGenreText(v) + " " : "";
+          genres += getGenreText(v) ? getGenreText(v) + ' ' : ''
         } else {
-          genres += getGenreText(v) || "";
+          genres += getGenreText(v) || ''
         }
-      });
-      item.genres = genres;
-      item.underImg = CONFIG.IMG_DOMAIN + "/t/p/w1920_and_h1080_bestv2" + item.backdrop;
-      return item;
-    });
+      })
+      item.genres = genres
+      item.underImg = CONFIG.IMG_DOMAIN + '/t/p/w1920_and_h1080_bestv2' + item.backdrop
+      return item
+    })
   }
-  let movie = [];
+  let movie = []
   if (localMovieTvData?.movie) {
-    movie = localMovieTvData.movie.filter((v) => v.voteAverage).sort((a, b) => b.voteAverage - a.voteAverage);
-    movie = movie.slice(0, 3).map((item) => {
-      item.name = removeExtension(item.name);
-      item.type = "movie";
-      let genres = "";
+    movie = localMovieTvData.movie.filter(v => v.voteAverage).sort((a, b) => b.voteAverage - a.voteAverage)
+    movie = movie.slice(0, 3).map(item => {
+      item.name = removeExtension(item.name)
+      item.type = 'movie'
+      let genres = ''
       item.genre_ids?.forEach((v, vindex) => {
         if (vindex < item.genre_ids.length - 1) {
-          genres += getGenreText(v) ? getGenreText(v) + " " : "";
+          genres += getGenreText(v) ? getGenreText(v) + ' ' : ''
         } else {
-          genres += getGenreText(v) || "";
+          genres += getGenreText(v) || ''
         }
-      });
-      item.genres = genres;
-      item.underImg = CONFIG.IMG_DOMAIN + "/t/p/w1920_and_h1080_bestv2" + item.backdrop;
-      return item;
-    });
+      })
+      item.genres = genres
+      item.underImg = CONFIG.IMG_DOMAIN + '/t/p/w1920_and_h1080_bestv2' + item.backdrop
+      return item
+    })
   }
-  listData.value = [...tv, ...movie];
-};
+  listData.value = [...tv, ...movie]
+}
 
-onShow(getRecommendList);
+onShow(getRecommendList)
 
 watch(
   () => localeStore.locale,
   () => {
-    getRecommendList();
+    getRecommendList()
   }
-);
+)
 </script>
 
 <style lang="scss" scoped>
@@ -151,7 +152,9 @@ watch(
             height: 100%;
             box-sizing: border-box;
             // padding: 140rpx 0 0 0;
-            background: linear-gradient(180deg, transparent, var(--app-bg-card));
+            // 底部渐隐要融进页面底色，用 --app-bg-secondary（.video 的背景色），
+            // 不能用 --app-bg-card：卡片色比页面底色亮，会在轮播与列表之间留一道接缝
+            background: linear-gradient(180deg, transparent, var(--app-bg-secondary));
 
             .swiper-content-container {
               padding: 0 24rpx;

@@ -56,6 +56,12 @@ const constantRoutes = [
         meta: { titleKey: 'pc.route.all' },
       },
       {
+        path: 'searchMatch',
+        component: () => import('@/pages/electron/search-match.vue'),
+        name: 'SearchMatch',
+        meta: { titleKey: 'navbar.searchAndMatchVideo' },
+      },
+      {
         path: 'search',
         component: () => import('@/pages/electron/search/index'),
         name: 'Search',
@@ -120,6 +126,18 @@ const constantRoutes = [
         component: () => import('@/pages/electron/media/catelog-mulu'),
         name: 'CatelogMulu',
         meta: { titleKey: 'pc.route.directorySetting' },
+      },
+      {
+        path: 'folder-picker',
+        component: () => import('@/pages/electron/media/folder-picker'),
+        name: 'FolderPicker',
+        meta: { titleKey: 'folderPicker.importDirectory' },
+      },
+      {
+        path: 'resource-library',
+        component: () => import('@/pages/electron/media/resource-library'),
+        name: 'ResourceLibrary',
+        meta: { titleKey: 'navbar.resourceLibrary' },
       },
     ],
   },

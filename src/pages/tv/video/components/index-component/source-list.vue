@@ -10,21 +10,22 @@
               <div :class="['classify-list-item', vitem.index === tabIndex ? 'classify-list-active' : '']" @click="handleChoose(vitem.index)">
                 <div class="item-left">
                   <div class="item-left-icon">
-                    <image :src="item.img"></image>
+                    <image v-if="getSourceIcon(item.type).kind === 'image'" :src="getSourceIcon(item.type).value"></image>
+                    <wil-icon v-else :name="getSourceIcon(item.type).value" class="item-left-glyph"></wil-icon>
                   </div>
                   <div class="item-left-name">{{ vitem.name }}</div>
                 </div>
                 <div class="item-right">
-                  <image src="@/static/sx-gd.png"></image>
+                  <wil-icon name="sx-gd-copy"></wil-icon>
                 </div>
               </div>
               <template #right>
                 <div class="swipe-button">
                   <div :class="['swipe-button-edit', iconIndex === 0 ? 'swipe-button-active' : '']">
-                    <image src="@/static/swipe-bj.png"></image>
+                    <wil-icon name="bianji" custom-color="#c5c6d0"></wil-icon>
                   </div>
                   <div :class="['swipe-button-delete', iconIndex === 1 ? 'swipe-button-active' : '']">
-                    <image src="@/static/swipe-sc.png"></image>
+                    <wil-icon name="shanchu" custom-color="#c5c6d0"></wil-icon>
                   </div>
                 </div>
               </template>
@@ -34,14 +35,18 @@
       </div>
     </div>
     <div :class="['source-list-add', tabIndex === lengthValue ? 'source-list-add_active' : '']" @click="toAdd">
-      <image src="@/static/jia-hao.png"></image>
+      <wil-icon name="jia" custom-color="#ffffff"></wil-icon>
     </div>
   </div>
 </template>
 
 <script setup>
+import { clearLibrary } from '@/utils/scrape'
+import { clearAccount } from '@/utils/sources/mulu'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import wilIcon from '@/components/common/wil-icon/index.vue'
+import { getSourceIcon } from '@/utils/sources/sourceIcon'
 import { loginUser, get189Folder, getQuarkFolder, getWopanFolder, get139Folder } from '@/utils/common'
 import { onShow } from '@dcloudio/uni-app'
 
@@ -119,13 +124,9 @@ const evtMove = keyCode => {
         let { item, vitem } = getItemAndVitem()
         selectSource(item, vitem)
       } else if (iconIndex.value == 0) {
-        //编辑当前资源
-        uni.showToast({
-          title: t('common.comingSoon'),
-          icon: 'none',
-        })
-        // let { item, vitem } = getItemAndVitem()
-        // editSource()
+        //编辑当前资源：进表单页并带上模式/账号，保存后进目录树
+        let { item, vitem } = getItemAndVitem()
+        editSource(item, vitem)
       } else if (iconIndex.value == 1) {
         //点击删除
         let { item, vitem } = getItemAndVitem()
@@ -282,10 +283,13 @@ const selectSource = (item, vitem) => {
     },
   })
 }
-//点击编辑资源
-const editSource = () => {
+//点击编辑资源：一律进表单页（含夸克），由表单页回填并决定是否转跳 webview。
+// 统一入口是为了让导航栈深度恒定（首页 → code-input → webview），
+// webview 结束后固定回退 2 层就能回到首页再打开目录树。
+const editSource = (item, vitem) => {
+  const q = `mode=edit&type=${encodeURIComponent(item.type)}&name=${encodeURIComponent(vitem.name || '')}`
   uni.navigateTo({
-    url: '/pages/tv/source/code-input',
+    url: `/pages/tv/source/code-input?${q}`,
   })
 }
 
@@ -298,8 +302,10 @@ const deleteSource = (item, vitem) => {
     confirmEvent: () => {
       item.list = item.list.filter(i => i.name != vitem.name)
       uni.setStorageSync('sourceList', sourceList.value)
+      // 同步清掉该账号的导入目录，否则下次同名账号添加会带出脏目录
+      clearAccount({ type: item.type, name: vitem.name })
       if (vitem.active) {
-        uni.removeStorageSync('localMovieTvData')
+        clearLibrary()
       }
       iconIndex.value = -1
       let historyPlay = uni.getStorageSync('historyPlay')
@@ -412,6 +418,12 @@ defineExpose({
                     border-radius: 50%;
                     display: block;
                   }
+
+                  .item-left-glyph {
+                    font-size: 80rpx;
+                    color: #ffffff;
+                    display: block;
+                  }
                 }
 
                 .item-left-name {
@@ -426,9 +438,8 @@ defineExpose({
                 width: 30rpx;
                 height: 30rpx;
 
-                image {
-                  width: 30rpx;
-                  height: 30rpx;
+                .iconfont {
+                  font-size: 30rpx;
                 }
               }
             }
@@ -459,9 +470,8 @@ defineExpose({
                 justify-content: center;
                 border: 4rpx solid transparent;
 
-                image {
-                  width: 40rpx;
-                  height: 40rpx;
+                .iconfont {
+                  font-size: 40rpx;
                 }
               }
 
@@ -472,9 +482,8 @@ defineExpose({
                 justify-content: center;
                 border: 4rpx solid transparent;
 
-                image {
-                  width: 40rpx;
-                  height: 40rpx;
+                .iconfont {
+                  font-size: 40rpx;
                 }
               }
 
@@ -502,9 +511,8 @@ defineExpose({
     border: 4rpx solid transparent;
     margin-top: 24rpx;
 
-    image {
-      width: 30rpx;
-      height: 30rpx;
+    .iconfont {
+      font-size: 30rpx;
     }
   }
 

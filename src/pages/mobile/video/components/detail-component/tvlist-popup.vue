@@ -16,16 +16,16 @@
         <div class="tvlist-popup-wrapper__list">
           <div class="tvlist-popup-wrapper__list-item" v-for="(item, index) in props.tvList" :key="item.name" @click="playVideo(item, index)">
             <div class="item-img">
-              <image :src="item.poster" mode="aspectFill" class="item-img-poster"  />
+              <image :src="item.poster" mode="aspectFill" class="item-img-poster" />
               <template v-if="isDownload">
-                <image src="@/static/check-active.png" class="select-icon" v-if="selectArr.some(i => i.id === item.id)" />
-                <image src="@/static/check.png" class="select-icon" v-else  />
+                <wil-icon name="bangdingchenggong" custom-color="#ff6701" v-if="selectArr.some(i => i.id === item.id)" />
+                <div class="unselect-icon" v-else></div>
               </template>
             </div>
             <div class="item-info">
               <div class="item-info-title">{{ item.ji + '.' + (item.title || t('video.episodeTitle', { episode: item.ji })) }}</div>
               <div class="item-info-star">
-                <image src="@/static/star-fill.png"  />
+                <wil-icon name="shoucang" custom-color="#f4bc22" />
                 <span class="star-score">{{ item.vote_average?.toFixed(1) || 10 }}</span>
                 <span class="star-runtime">{{ item.runtimeOrg ? calTime(item.runtimeOrg, 'cn') : t('video.noDuration') }}</span>
               </div>
@@ -42,8 +42,9 @@
 import { ref } from 'vue'
 import { calTime } from '@/utils/scrape'
 import { getWebDAVUrl, get189VideoUrl, getQuarkResolutionUrl, getQuarkVideoUrl } from '@/utils/common'
-import { queryAll, createDownload } from '@/utils/download'
+import { queryAll, createDownload, judgeSelect } from '@/utils/download'
 import { useI18n } from 'vue-i18n'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 
 const { t } = useI18n()
 const props = defineProps({
@@ -91,14 +92,16 @@ const confirmDownload = () => {
 
 const playVideo = (item, index) => {
   if (isDownload.value) {
-    const { selectMedia, selectType } = judgeSelect()
+    // download.js 的 judgeSelect 会返回 { selectMedia, selectType }
+    const { selectType } = judgeSelect()
     const lastDotIndex = item.name.lastIndexOf('.')
     let format = item.name.substring(lastDotIndex + 1)
     if (selectArr.value.some(i => i.id === item.id)) {
       selectArr.value = selectArr.value.filter(i => i.id !== item.id)
     } else {
       selectArr.value.push({ saveName: `${props.title} ${t('video.episodeTitle', { episode: item.ji })}.${format}`, ...item })
-      if (selectType.type === 'WebDAV') {
+      if (selectType?.type === 'WebDAV') {
+        // WebDAV 下载要靠 webdavPath 解析直链，必须带上所在的季目录
         selectArr.value.forEach(v => {
           v.webdavPath = decodeURIComponent(props.activeSeason.path.slice(1) + '/' + v.name)
         })
@@ -194,9 +197,18 @@ getH5NavbarHeight()
               height: 100%;
               border-radius: 20rpx;
             }
-            .select-icon {
+            .unselect-icon {
               width: 40rpx;
               height: 40rpx;
+              border: 2rpx solid gray;
+              position: absolute;
+              top: 10rpx;
+              right: 10rpx;
+            }
+            .iconfont {
+              width: 40rpx;
+              height: 40rpx;
+              font-size: 40rpx;
               position: absolute;
               top: 10rpx;
               right: 10rpx;
@@ -212,9 +224,8 @@ getH5NavbarHeight()
               display: flex;
               align-items: center;
               padding-top: 16rpx;
-              image {
-                width: 32rpx;
-                height: 32rpx;
+              .iconfont {
+                font-size: 32rpx;
                 display: block;
               }
               .star-score {

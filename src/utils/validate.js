@@ -1,9 +1,14 @@
 import { loginUser } from "@/utils/common";
 import { loginEmby, getEmbyInfo } from "@/utils/emby";
+import { renameAccount } from '@/utils/sources/mulu';
+import { openFolderPicker } from '@/utils/sources/picker';
 import { i18n } from '@/i18n/index.js';
 
 //校验webdav
-export const validateWebdav = async (action, formData, oldData, routerParams, back = true) => {
+export const validateWebdav = async (action, formData, oldData, routerParams, back = true, opts = {}) => {
+    // 各端目录树路径与回退层数不同：手机 source-list→file-source→表单(delta 2)，TV 设置弹层→表单(delta 1)
+    // 只有目录树路径需要按端区分；回退层数由 openFolderPicker 按页面栈自动推导
+    const pickerPath = opts.pickerPath
     const isAdd = typeof action === 'boolean' ? action : action == "添加Openlist/Alist";
     let sourceList = uni.getStorageSync("sourceList");
     if (isAdd) {
@@ -34,14 +39,14 @@ export const validateWebdav = async (action, formData, oldData, routerParams, ba
             }
             uni.setStorageSync("sourceList", sourceList);
             if (back) {
-                uni.navigateBack({
-                    delta: 2,
+                // 添加成功后直接进导入页：勾选目录 + 选择导入到媒体库/资源库。
+                // 不再要求用户事先声明「这是电影目录 / 电视剧目录」。
+                openFolderPicker({
+                    type: 'WebDAV',
+                    name: formData.name,
+                    mode: 'add',
+                    path: pickerPath,
                 });
-                setTimeout(() => {
-                    uni.navigateTo({
-                        url: '/pages/mobile/media/catelog-setting'
-                    })
-                }, 300);
             }
             return res
         } catch (error) {
@@ -77,16 +82,26 @@ export const validateWebdav = async (action, formData, oldData, routerParams, ba
                 obj[v] = formData[v];
             });
             uni.setStorageSync("sourceList", sourceList);
-            if (routerParams.isActive == "1") {
+
+            // 账号改名后同步 muluData 里的目录条目，否则该账号的导入目录会失联
+            if (oldData?.name && oldData.name !== formData.name) {
+                renameAccount('WebDAV', oldData.name, formData.name);
+            }
+
+            if (back) {
+                // 修改同样进目录树：回填已导入目录，允许增删
                 uni.setStorageSync("isreload", true);
-                if (back) {
-                    uni.navigateBack({
-                        delta: 2,
-                    });
-                }
+                openFolderPicker({
+                    type: 'WebDAV',
+                    name: formData.name,
+                    mode: 'edit',
+                    path: pickerPath,
+                });
                 return res;
             }
-            back ? uni.navigateBack() : '';
+            if (routerParams.isActive == "1") {
+                uni.setStorageSync("isreload", true);
+            }
             return res
         } catch (error) {
             uni.showToast({
@@ -184,6 +199,12 @@ export const validateEmby = async (action, formData, oldData, routerParams) => {
                     obj[v] = formData[v];
                 });
                 uni.setStorageSync("sourceList", sourceList);
+
+                // 账号改名后同步 muluData 里的目录条目（Emby 不改名也会走到这里，判等后跳过）
+                if (oldData?.name && oldData.name !== formData.name) {
+                    renameAccount('Emby', oldData.name, formData.name);
+                }
+
                 if (routerParams.isActive == "1") {
                     uni.setStorageSync("isreload", true);
                     uni.navigateBack({
@@ -191,6 +212,7 @@ export const validateEmby = async (action, formData, oldData, routerParams) => {
                     });
                     return;
                 }
+                // Emby 是服务端媒体库，没有「扫描目录」概念，不入目录树
                 uni.navigateBack();
             })
             .catch(() => {

@@ -1,5 +1,6 @@
 // 移动云盘 139 凭据存储：authorization 落库 sourceList + 账密独立存储（参照 cloud189/store.js 模式）
 import { addOperLog } from '@/network/apis'
+import { renameAccount } from '@/utils/sources/mulu'
 
 export const CLOUD139_SOURCE_TYPE = '移动云盘'
 
@@ -46,16 +47,8 @@ export const persist139Token = (tokenInfo, { isActive } = {}) => {
       let historyArr = uni.getStorageSync('historyPlay') || []
       historyArr = historyArr.filter(v => v.sourceType != CLOUD139_SOURCE_TYPE || v.sourceName != oldName)
       uni.setStorageSync('historyPlay', historyArr)
-      const muluData = uni.getStorageSync('muluData')
-      if (muluData) {
-        muluData.movie?.forEach(v => {
-          v.list = v.list?.filter(m => m.sourceName != oldName || m.sourceType != CLOUD139_SOURCE_TYPE)
-        })
-        muluData.tv?.forEach(v => {
-          v.list = v.list?.filter(m => m.sourceName != oldName || m.sourceType != CLOUD139_SOURCE_TYPE)
-        })
-        uni.setStorageSync('muluData', muluData)
-      }
+      // 原先这里操作的是不存在的 v.list 字段，等于什么也没做
+      renameAccount(CLOUD139_SOURCE_TYPE, oldName, loginName)
     }
     cloud139.list = [
       {
@@ -71,7 +64,7 @@ export const persist139Token = (tokenInfo, { isActive } = {}) => {
       {
         name: loginName,
         authorization: tokenInfo.authorization,
-        active: isActive ? '1' : '0',
+        active: !!isActive,
       },
     ]
     addOperLog({ title: '登录移动云盘', businessType: 12, operatorType: 2, operUrl: '' })

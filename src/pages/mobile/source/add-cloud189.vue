@@ -29,6 +29,7 @@ import { useThemeColors } from '@/hooks/useThemeColors'
 import { useI18n } from 'vue-i18n'
 import { initLoginParam, login189 } from '@/utils/cloud189/login.js'
 import { persist189Token, save189Password } from '@/utils/cloud189/store.js'
+import { openFolderPicker } from '@/utils/sources/picker'
 
 const { t } = useI18n()
 const themeClass = useThemeClass()
@@ -100,15 +101,14 @@ const doLogin = async validateCode => {
     const { isNew } = persist189Token(tokenInfo, routerParams.value)
     save189Password(tokenInfo.loginName, state.formData.username, state.formData.password)
     uni.showToast({ title: isNew ? t('source.addAccountSuccess') : t('source.modifyAccountSuccess'), icon: 'none' })
-    if (isNew) {
-      setTimeout(() => {
-        uni.navigateTo({ url: '/pages/mobile/media/catelog-setting' })
-      }, 1800)
-    } else {
-      setTimeout(() => {
-        uni.navigateBack({ delta: 2 })
-      }, 1500)
-    }
+    // 新增和修改都进目录树：新增首次勾选，修改回填已导入目录后调整
+    setTimeout(() => {
+      openFolderPicker({
+        type: '天翼云盘',
+        name: tokenInfo.loginName,
+        mode: isNew ? 'add' : 'edit',
+      })
+    }, 1800)
   } catch (e) {
     uni.showToast({ title: e.message || t('source.loginFailed'), icon: 'none' })
     // 登录失败刷新登录参数（对齐 AlistGo：销毁并重新初始化以刷新验证码）

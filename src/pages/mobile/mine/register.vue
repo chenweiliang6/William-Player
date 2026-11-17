@@ -27,8 +27,7 @@
       </div>
 
       <div class="user-agreement" @click="checkAgree">
-        <image :src="checkIcon" v-show="!userAgree" />
-        <image :src="checkActiveIcon" v-show="userAgree" />
+        <wil-icon name="kqxz" :custom-color="userAgree ? '#ff6701' : '#c8c9cc'" class="user-agreement-icon" />
         <div class="user-agreement-word">
           <span>{{ t('auth.readAndAgree') }}</span>
           <span>{{ t('auth.userAgreement') }}</span>
@@ -44,8 +43,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import wilForm from '@/components/mobile/wil-form/index.vue'
 import wilNavbar from '@/components/mobile/wil-navbar/index.vue'
-import checkIcon from '@/static/check.png'
-import checkActiveIcon from '@/static/check-active.png'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 import { registerUser, getWeUserByopenId, loginByPhone, sendEmail } from '@/network/apis'
 import * as CONFIG from '@/utils/config'
 import { encrypt } from '@/utils/jsencrypt.js'
@@ -401,9 +399,8 @@ page {
     left: 0;
     box-sizing: border-box;
 
-    image {
-      width: 28rpx;
-      height: 28rpx;
+    .user-agreement-icon {
+      font-size: 28rpx;
       display: block;
     }
 

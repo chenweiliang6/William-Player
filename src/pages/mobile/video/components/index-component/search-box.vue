@@ -3,11 +3,11 @@
         <div class="item-left" :style="{ backgroundImage: `url(${setEmptyImg(props.data.poster)})` }">
             <div :class="['item-left-logo', props.data.type == '1' ? 'item-left-tv' : '']">
                 <template v-if="props.data.type == '1'">
-                    <image :src="tvLittle"  />
+                    <wil-icon name="xianshiping" custom-color="#ffffff" />
                     <span>{{ t('video.tv') }}</span>
                 </template>
                 <template v-else>
-                    <image :src="movieLittle"  />
+                    <wil-icon name="dianying" custom-color="#ffffff" />
                     <span>{{ t('video.movie') }}</span>
                 </template>
             </div>
@@ -31,11 +31,10 @@
 </template>
 
 <script setup>
-import movieLittle from "@/static/movie-little.png";
-import tvLittle from "@/static/tv-little.png";
+import wilIcon from '@/components/common/wil-icon/index.vue'
 import posterEmpty from "@/static/poster-empty.png";
 import * as CONFIG from "@/utils/config";
-import { handleSeasonName } from "@/utils/scrape.js";
+import { handleSeasonName } from "@/utils/scrape";
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -98,6 +97,10 @@ const setEmptyImg = (poster) => {
             image {
                 width: 24rpx;
                 height: 24rpx;
+            }
+
+            .iconfont {
+                font-size: 24rpx;
             }
 
             span {

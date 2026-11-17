@@ -12,7 +12,7 @@
       <wil-form v-model="state.formData" :options="options" ref="base_form"></wil-form>
     </wil-modal>
     <div class="live-add" @click="openForm">
-      <image src="@/static/jia-hao.png"  />
+      <wil-icon name="jia" />
     </div>
     <share-dialog v-model:visible="showShareModal" :shareUrl="shareUrl"></share-dialog>
   </div>
@@ -22,6 +22,7 @@
 import { computed, onBeforeMount, ref, reactive } from 'vue'
 import wilForm from '@/components/mobile/wil-form/index.vue'
 import wilModal from '@/components/mobile/wil-modal/index.vue'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 import shareDialog from '../video/components/index-component/share-dialog.vue'
 import { parseM3UToArray, groupByGroupTitle } from '@/utils/tools.js'
 import { getCutContent } from '@/utils/common'
@@ -271,9 +272,9 @@ page {
     right: 24rpx;
     box-shadow: 0 8rpx 12rpx #5b73a01a;
 
-    image {
-      width: 50rpx;
-      height: 50rpx;
+    .iconfont {
+      font-size: 50rpx;
+      color: #ffffff;
     }
   }
 }

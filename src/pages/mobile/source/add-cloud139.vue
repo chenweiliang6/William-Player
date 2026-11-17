@@ -20,6 +20,7 @@ import { useThemeColors } from '@/hooks/useThemeColors'
 import { useI18n } from 'vue-i18n'
 import { login139 } from '@/utils/cloud139/login.js'
 import { persist139Token, save139Password } from '@/utils/cloud139/store.js'
+import { openFolderPicker } from '@/utils/sources/picker'
 
 const { t } = useI18n()
 const themeClass = useThemeClass()
@@ -51,17 +52,16 @@ const formOptions = computed(() => [
 ])
 
 // 登录成功后的统一跳转（对齐 add-wopan）
-const afterLoginSuccess = isNew => {
+const afterLoginSuccess = (isNew, loginName) => {
   uni.showToast({ title: isNew ? t('source.addAccountSuccess') : t('source.modifyAccountSuccess'), icon: 'none' })
-  if (isNew) {
-    setTimeout(() => {
-      uni.navigateTo({ url: '/pages/mobile/media/catelog-setting' })
-    }, 1800)
-  } else {
-    setTimeout(() => {
-      uni.navigateBack({ delta: 2 })
-    }, 1500)
-  }
+  // 新增和修改都进目录树：新增首次勾选，修改回填已导入目录后调整
+  setTimeout(() => {
+    openFolderPicker({
+      type: '移动云盘',
+      name: loginName || '',
+      mode: isNew ? 'add' : 'edit',
+    })
+  }, 1800)
 }
 
 const doLogin = async () => {
@@ -70,11 +70,11 @@ const doLogin = async () => {
     const { phone, password } = state.formData
     const result = await login139(phone, password)
     save139Password(phone, phone, password)
-    const { isNew } = persist139Token(
+    const { isNew, loginName } = persist139Token(
       { phone, authorization: result.authorization, account: result.account },
       routerParams.value
     )
-    afterLoginSuccess(isNew)
+    afterLoginSuccess(isNew, loginName)
   } catch (e) {
     // 风控/账密错误映射为专用提示，其余按 message 兜底
     let title = e.message || t('source.loginFailed')

@@ -25,6 +25,12 @@
             }
         },
         {
+            "path": "pages/tv/video/search-match",
+            "style": {
+                "navigationStyle": "custom"
+            }
+        },
+        {
             "path": "pages/tv/video/video-player",
             "style": {
                 "navigationStyle": "custom"
@@ -50,6 +56,24 @@
         },
         {
             "path": "pages/tv/source/catelog-settings",
+            "style": {
+                "navigationStyle": "custom"
+            }
+        },
+        {
+            "path": "pages/tv/source/folder-picker",
+            "style": {
+                "navigationStyle": "custom"
+            }
+        },
+        {
+            "path": "pages/tv/source/resource-library",
+            "style": {
+                "navigationStyle": "custom"
+            }
+        },
+        {
+            "path": "pages/tv/source/resource-browse",
             "style": {
                 "navigationStyle": "custom"
             }

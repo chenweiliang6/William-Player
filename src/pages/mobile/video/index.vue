@@ -13,17 +13,28 @@
       :class="['navbar-transparent', refreshLoading ? 'navbar-white' : '']"
     ></video-navbar>
     <template v-if="isConnected">
-      <Skeleton v-if="refreshLoading"></Skeleton>
+      <!-- 骨架屏只在「库里还没有任何内容」时遮挡。
+           刮削改为边刮边显示后，库非空时要直接露出海报墙，
+           新刮到的卡片就地插入；继续遮住会让已有内容也看不见。 -->
+      <Skeleton v-if="refreshLoading && !hasLibraryContent(localMovieTvData)"></Skeleton>
       <template v-else>
-        <div class="video-container" v-if="selectType.type == 'Emby' ? embyMovieTvList?.length : localMovieTvData?.movie?.length || localMovieTvData?.tv?.length">
+        <div class="video-container" v-if="selectType.type == 'Emby' ? embyMovieTvList?.length : hasLibraryContent(localMovieTvData)">
           <scroll-view :scroll-y="true" class="video-container-scroll" @scroll="handlePageScroll">
             <template v-if="selectType.type != 'Emby'">
               <star-recommend v-if="settingData.showRecommend"></star-recommend>
               <div class="scroll-list" :style="{ paddingTop: settingData.showRecommend ? '40rpx' : `calc(40rpx + ${navbarHeight + 'px'})` }">
                 <recent-played v-if="historyPlay.length" :listData="historyPlay" :isConnected="isConnected"></recent-played>
-                <hx-list :title="t('video.movie')" :listData="localMovieTvData?.movie" v-if="localMovieTvData?.movie?.length" :isConnected="isConnected"></hx-list>
-                <hx-list :title="t('video.tv')" :listData="localMovieTvData?.tv" v-if="localMovieTvData?.tv?.length" :isConnected="isConnected"></hx-list>
-                <Classify :isConnected="isConnected"></Classify>
+                <!-- 6 个分类分区：电影/电视剧/动漫/综艺/纪录片，空分类不渲染 -->
+                <hx-list
+                  v-for="tab in categorySections"
+                  :key="tab.key"
+                  :title="tab.label"
+                  :category="tab.key"
+                  :listData="tab.list"
+                  :revision="libraryRevision"
+                  :isConnected="isConnected"
+                ></hx-list>
+                <Classify :isConnected="isConnected" :revision="libraryRevision"></Classify>
               </div>
             </template>
             <!-- emby专用的首页 -->
@@ -32,7 +43,7 @@
             </template>
           </scroll-view>
         </div>
-        <div class="video-empty" v-if="selectType.type == 'Emby' ? !embyMovieTvList?.length : !localMovieTvData?.movie?.length && !localMovieTvData?.tv?.length">
+        <div class="video-empty" v-if="selectType.type == 'Emby' ? !embyMovieTvList?.length : !hasLibraryContent(localMovieTvData)">
           <div class="video-empty-logo">
             <image :src="appLogo"  />
             <span>William Player</span>
@@ -69,7 +80,8 @@
 </template>
 
 <script setup>
-import { onBeforeMount, ref, watch } from 'vue'
+import { setMovieTvData, hasLibraryContent } from '@/utils/scrape'
+import { computed, onBeforeMount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import videoNavbar from './components/index-component/navbar.vue'
 import Skeleton from './components/index-component/skeleton.vue'
@@ -110,6 +122,8 @@ const {
   navbarStyle,
   refreshVideo,
   judgeSelect,
+  cancelRefresh,
+  libraryRevision,
 } = useVideoIndex({ wil_modal })
 const showDialog = ref(false)
 const showShareModal = ref(false)
@@ -131,17 +145,44 @@ const isConnected = ref(false) //手机是否连接网络
 
 embyMovieTvList.value = uni.getStorageSync('embyMovieTvList')
 
+// 首页分类分区。对齐爆米花：电影 / 电视剧 / 动漫 / 综艺 / 其他。
+// 「其他」收纳的是识别失败的条目（片名解析不出或 TMDB 匹配不可信），
+// 爆米花首页没有独立的「未识别」分区——识别不了的都进「其他」。
+const CATEGORY_LABEL = {
+  movie: 'video.movie',
+  tv: 'video.tv',
+  anime: 'video.anime',
+  variety: 'video.variety',
+  documentary: 'video.documentary',
+  // 收纳未识别条目；映射到「其他」文案
+  unidentified: 'video.other',
+}
+// 展示顺序：「其他」排在所有正常分类之后
+const CATEGORY_ORDER = ['movie', 'tv', 'anime', 'variety', 'documentary', 'unidentified']
+
+const categorySections = computed(() => {
+  const data = localMovieTvData.value || {}
+  const byCategory = data.byCategory || {}
+  return CATEGORY_ORDER
+    .map(key => {
+      // 兼容：byCategory 缺失时用旧的 movie/tv 两桶
+      const fallback = key === 'movie' ? data.movie : key === 'tv' ? data.tv : []
+      const list = byCategory[key]?.length ? byCategory[key] : (fallback || [])
+      return { key, label: t(CATEGORY_LABEL[key]), list }
+    })
+    .filter(sec => sec.list?.length)
+})
+
+// 取消刮削：只置取消标记，由 useVideoIndex 的 finally 收尾。
+// 不要在这里清空 localMovieTvData —— 取消意味着「放弃本次」，
+// 海报墙应当保持取消前的样子，而不是被打成空状态。
 const pauseRefresh = () => {
-  refreshData.value = { found: 0, toupdate: 0, updated: 0, success: 0, fail: 0 }
-  movieTvData.value = { movie: [], tv: [] }
-  localMovieTvData.value.tv = []
-  localMovieTvData.value.movie = []
-  uni.setStorageSync('localMovieTvData', localMovieTvData.value)
-  refreshLoading.value = false
+  cancelRefresh('user')
 }
 
 const toAddWebdav = () => {
-  uni.navigateTo({
+  // 资源库已是 tabBar 页，必须用 switchTab
+  uni.switchTab({
     url: '/pages/mobile/source/source-list',
   })
 }

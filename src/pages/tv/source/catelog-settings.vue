@@ -22,13 +22,13 @@
           <div :class="['mulu-item', item.$index === tabIndex && iconIndex === -1 ? 'mulu-active' : '']" @click="chooseNowMulu(item)">
             <div class="mulu-item-left">
               <div class="mulu-item-left__icon">
-                <image :src="selectType.img"></image>
+                <image v-if="getSourceIcon(selectType.type).kind === 'image'" :src="getSourceIcon(selectType.type).value"></image>
+                <wil-icon v-else :name="getSourceIcon(selectType.type).value" class="mulu-item-glyph"></wil-icon>
               </div>
               <div class="mulu-item-left__name">{{ item.name }}</div>
             </div>
             <div :class="['mulu-item-right', item.$index === tabIndex && iconIndex === 0 ? 'mulu-right-active' : '']" @click.stop="muluDown(item)">
-              <image src="@/static/arrow-black.png" v-if="item.$index === tabIndex && iconIndex === -1"></image>
-              <image src="@/static/arrow-gray.png" v-else></image>
+              <wil-icon name="arrow-right" :custom-color="item.$index === tabIndex && iconIndex === -1 ? '#000015' : '#c5c6d0'"></wil-icon>
             </div>
           </div>
         </template>
@@ -52,6 +52,8 @@ import tvPage from '@/components/tv/tv-page/index'
 import tvModal from '@/components/tv/tv-modal/index.vue'
 import sourceList from '../video/components/index-component/source-list.vue'
 import wilList from '@/components/mobile/wil-list/index.vue'
+import wilIcon from '@/components/common/wil-icon/index.vue'
+import { getSourceIcon } from '@/utils/sources/sourceIcon'
 import { useSelectFolder } from '@/hooks/useSelectFolder'
 import { onLoad } from '@dcloudio/uni-app'
 import { loginUser, getFolder, getTvSeason, get189Folder, getQuarkFolder, get139Folder, getCutContent } from '@/utils/common'
@@ -94,7 +96,6 @@ const {
   toBack,
   getFileList,
   clickCell,
-  setImg,
   confirm,
 } = useSelectFolder({ selectType: selectType, selectMedia: selectMedia, result: result, title: toRef(() => routerParams.value.title), catalogType: catalogType, emits: emits })
 
@@ -340,6 +341,12 @@ page {
                   border-radius: 50%;
                   display: block;
                 }
+
+                .mulu-item-glyph {
+                  font-size: 80rpx;
+                  color: #ffffff;
+                  display: block;
+                }
               }
 
               .mulu-item-left__name {
@@ -357,9 +364,8 @@ page {
               border-radius: 50%;
               border: 4rpx solid transparent;
 
-              image {
-                width: 46rpx;
-                height: 46rpx;
+              .iconfont {
+                font-size: 46rpx;
                 display: block;
               }
             }

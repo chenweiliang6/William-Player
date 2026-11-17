@@ -1,8 +1,5 @@
 <template>
   <view class="sk-container" :style="{ paddingTop: navBarHeight }">
-    <view class="sk-animation">
-      <view class="sk-animation-guangzhu"></view>
-    </view>
     <view class="h5-div video">
       <view class="h5-div video-container" style="overflow: hidden;">
         <view class="h5-div recent-played">
@@ -108,16 +105,6 @@ getNavHeight();
 </script>
 
 <style lang="scss" scoped>
-@keyframes backpos {
-  0% {
-    left: -750rpx;
-  }
-
-  100% {
-    left: calc(750rpx + 100%);
-  }
-}
-
 .recent-played {
   width: 100%;
   margin-bottom: 50rpx;
@@ -281,48 +268,22 @@ getNavHeight();
           }
         }
 
-        .is-move {
-          transition: transform 0.3s ease;
-        }
-
-        .is-new {
-          animation: opacityIn 0.3s ease;
-        }
       }
     }
   }
 }
 
-.sk-animation {
-  animation: backpos 1.5s ease-in-out 0s infinite;
-  background-repeat: no-repeat;
-  height: 100%;
-  left: 0;
-  position: absolute;
-  top: 0;
-  width: 100%;
-  z-index: 1;
-
-  .sk-animation-guangzhu {
-    width: 120rpx;
-    height: 100%;
-    transform: skew(-20deg);
-    background: linear-gradient(100deg,
-        hsla(0, 0%, 100%, 0),
-        hsl(0, 0%, 100%) 50%,
-        hsla(0, 0%, 100%, 0) 80%);
-  }
-}
-
+// ── 骨架流光 ──
+// 旧做法是一条 120rpx 全高的白色光柱横向扫过整页（@keyframes backpos +
+// .sk-animation-guangzhu）。它不贴合任何骨架块形状，会压过空白区和文字，
+// 且是纯白在浅色背景上很刺眼。现改为让每个骨架块自带一道斜向渐变、
+// 靠 background-position 平移 —— 光只存在于块内，观感与 shapes-clipped
+// 的 ShimmerLayout 一致。
 .sk-transparent {
   color: transparent !important;
 }
 
 .sk-text-14-2857-322 {
-  background-image: linear-gradient(transparent 14.2857%,
-      var(--app-bg-input) 0%,
-      var(--app-bg-input) 85.7143%,
-      transparent 0%) !important;
   background-size: 100% 56rpx;
   position: relative !important;
 }
@@ -336,19 +297,11 @@ getNavHeight();
 }
 
 .sk-text-14-2857-459 {
-  background-image: linear-gradient(transparent 14.2857%,
-      var(--app-bg-input) 0%,
-      var(--app-bg-input) 85.7143%,
-      transparent 0%) !important;
   background-size: 100% 50.4rpx;
   position: relative !important;
 }
 
 .sk-text-14-2857-474 {
-  background-image: linear-gradient(transparent 14.2857%,
-      var(--app-bg-input) 0%,
-      var(--app-bg-input) 85.7143%,
-      transparent 0%) !important;
   background-size: 100% 42rpx;
   position: relative !important;
 }
@@ -358,148 +311,82 @@ getNavHeight();
 }
 
 .sk-text-14-2857-534 {
-  background-image: linear-gradient(transparent 14.2857%,
-      var(--app-bg-input) 0%,
-      var(--app-bg-input) 85.7143%,
-      transparent 0%) !important;
   background-size: 100% 33.6rpx;
   position: absolute !important;
 }
 
 .sk-text-14-2857-53 {
-  background-image: linear-gradient(transparent 14.2857%,
-      var(--app-bg-input) 0%,
-      var(--app-bg-input) 85.7143%,
-      transparent 0%) !important;
   background-size: 100% 39.2rpx;
   position: relative !important;
 }
 
 .sk-text-14-2857-57 {
-  background-image: linear-gradient(transparent 14.2857%,
-      var(--app-bg-input) 0%,
-      var(--app-bg-input) 85.7143%,
-      transparent 0%) !important;
   background-size: 100% 39.2rpx;
   position: relative !important;
 }
 
 .sk-text-14-2857-375 {
-  background-image: linear-gradient(transparent 14.2857%,
-      var(--app-bg-input) 0%,
-      var(--app-bg-input) 85.7143%,
-      transparent 0%) !important;
   background-size: 100% 50.4rpx;
   position: relative !important;
 }
 
 .sk-text-14-2857-432 {
-  background-image: linear-gradient(transparent 14.2857%,
-      var(--app-bg-input) 0%,
-      var(--app-bg-input) 85.7143%,
-      transparent 0%) !important;
   background-size: 100% 42rpx;
   position: relative !important;
 }
 
 .sk-text-14-2857-799 {
-  background-image: linear-gradient(transparent 14.2857%,
-      var(--app-bg-input) 0%,
-      var(--app-bg-input) 85.7143%,
-      transparent 0%) !important;
   background-size: 100% 39.2rpx;
   position: relative !important;
 }
 
 .sk-text-14-2857-681 {
-  background-image: linear-gradient(transparent 14.2857%,
-      var(--app-bg-input) 0%,
-      var(--app-bg-input) 85.7143%,
-      transparent 0%) !important;
   background-size: 100% 33.6rpx;
   position: relative !important;
 }
 
 .sk-text-14-2857-471 {
-  background-image: linear-gradient(transparent 14.2857%,
-      var(--app-bg-input) 0%,
-      var(--app-bg-input) 85.7143%,
-      transparent 0%) !important;
   background-size: 100% 39.2rpx;
   position: relative !important;
 }
 
 .sk-text-14-2857-780 {
-  background-image: linear-gradient(transparent 14.2857%,
-      var(--app-bg-input) 0%,
-      var(--app-bg-input) 85.7143%,
-      transparent 0%) !important;
   background-size: 100% 33.6rpx;
   position: relative !important;
 }
 
 .sk-text-14-2857-396 {
-  background-image: linear-gradient(transparent 14.2857%,
-      var(--app-bg-input) 0%,
-      var(--app-bg-input) 85.7143%,
-      transparent 0%) !important;
   background-size: 100% 39.2rpx;
   position: relative !important;
 }
 
 .sk-text-14-2857-103 {
-  background-image: linear-gradient(transparent 14.2857%,
-      var(--app-bg-input) 0%,
-      var(--app-bg-input) 85.7143%,
-      transparent 0%) !important;
   background-size: 100% 33.6rpx;
   position: relative !important;
 }
 
 .sk-text-14-2857-211 {
-  background-image: linear-gradient(transparent 14.2857%,
-      var(--app-bg-input) 0%,
-      var(--app-bg-input) 85.7143%,
-      transparent 0%) !important;
   background-size: 100% 39.2rpx;
   position: relative !important;
 }
 
 .sk-text-14-2857-117 {
-  background-image: linear-gradient(transparent 14.2857%,
-      var(--app-bg-input) 0%,
-      var(--app-bg-input) 85.7143%,
-      transparent 0%) !important;
   background-size: 100% 33.6rpx;
   position: relative !important;
 }
 
 .sk-text-14-2857-706 {
-  background-image: linear-gradient(transparent 14.2857%,
-      var(--app-bg-input) 0%,
-      var(--app-bg-input) 85.7143%,
-      transparent 0%) !important;
   background-size: 100% 50.4rpx;
   position: relative !important;
 }
 
 .sk-text-14-2857-346 {
-  background-image: linear-gradient(transparent 14.2857%,
-      var(--app-bg-input) 0%,
-      var(--app-bg-input) 85.7143%,
-      transparent 0%) !important;
   background-size: 100% 42rpx;
   position: relative !important;
 }
 
-.sk-image {
-  background: var(--app-bg-input) !important;
-}
-
 .sk-pseudo::before,
 .sk-pseudo::after {
-  background: var(--app-bg-input) !important;
-  background-image: none !important;
   color: transparent !important;
   border-color: transparent !important;
 }
@@ -524,4 +411,58 @@ getNavHeight();
   box-sizing: border-box;
   position: relative;
 }
+// 用 vw 绝对坐标而非百分比：百分比会随块宽缩放，宽窄不同的块光带互相错位
+@keyframes skShimmer {
+  0% {
+    background-position: -60vw 0;
+  }
+
+  100% {
+    background-position: 160vw 0;
+  }
+}
+
+// 覆盖文件末尾所有 .sk-text-* 的底色：浅色模式下 --app-bg-input 是 #ffffff，
+// 与页面背景同色，导致骨架块完全看不见。这里统一换成可见的骨架底色，
+// 并叠加流光。!important 用于盖过各 .sk-text-* 自带的 !important 声明。
+.sk-text-14-2857,
+[class*='sk-text-14-2857-'] {
+  background-color: var(--app-skeleton-base) !important;
+  background-image: linear-gradient(100deg,
+      transparent 22%,
+      var(--app-skeleton-highlight) 50%,
+      transparent 78%) !important;
+  background-size: 60vw 100% !important;
+  background-repeat: no-repeat !important;
+  animation: skShimmer 1.6s linear infinite;
+}
+
+.sk-image {
+  background-color: var(--app-skeleton-base-strong) !important;
+  background-image: linear-gradient(100deg,
+      transparent 22%,
+      var(--app-skeleton-highlight) 50%,
+      transparent 78%) !important;
+  background-size: 60vw 100% !important;
+  background-repeat: no-repeat !important;
+  animation: skShimmer 1.6s linear infinite;
+}
+
+// 装饰性伪元素（图标占位）沿用底色，不参与流光，避免碎光点
+.sk-pseudo::before,
+.sk-pseudo::after {
+  background: var(--app-skeleton-base) !important;
+  background-image: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .sk-text-14-2857,
+  [class*='sk-text-14-2857-'],
+  .sk-image {
+    animation: none;
+  }
+}
+
+
 </style>

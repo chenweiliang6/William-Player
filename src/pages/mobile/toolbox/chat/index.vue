@@ -2,7 +2,7 @@
   <div :class="['ai-chat', themeClass]">
     <wil-navbar :title="t('navbar.aiQa')" :right-show="true">
       <template #right>
-        <image src="@/static/add-conversation.png" @click="addNew"  />
+        <wil-icon name="xinjianduihua" @click="addNew" />
       </template>
     </wil-navbar>
     <view class="chat-box">
@@ -97,6 +97,7 @@ import h5Video from './components/h5-video.vue'
 import { ref } from 'vue'
 import * as CONFIG from '@/utils/config.js'
 import wilNavbar from '@/components/mobile/wil-navbar/index.vue'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 import { generations } from '@/network/apis.js'
 import { useThemeClass } from '@/hooks/useThemeClass'
 import { useI18n } from 'vue-i18n'
@@ -331,9 +332,9 @@ page {
     .nut-navbar--placeholder {
       .nut-navbar {
         .nut-navbar__right {
-          image {
-            width: 40rpx;
-            height: 40rpx;
+          .iconfont {
+            font-size: 40rpx;
+            color: var(--app-icon-strong);
             display: block;
           }
         }

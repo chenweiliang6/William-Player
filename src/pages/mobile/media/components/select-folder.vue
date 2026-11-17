@@ -22,8 +22,15 @@
           </template>
           <template #icon>
             <div class="cell-icon">
-              <image :src="selectName == item.name ? checkActive : checkIcon" @click.stop="chooseName(item)" v-if="item.type == '1'"  />
-              <image :src="setImg(item)"  />
+              <wil-icon
+                name="kqxz"
+                :custom-color="selectName == item.name ? '#ff6701' : 'var(--app-icon-disabled)'"
+                class="cell-check"
+                @click.stop="chooseName(item)"
+                v-if="item.type == '1'"
+              />
+              <image v-if="fileIconOf(item).kind === 'image'" :src="fileIconOf(item).value" />
+              <wil-icon v-else :name="fileIconOf(item).value" :custom-color="fileIconOf(item).color" class="cell-glyph" />
             </div>
           </template>
           <template #link>
@@ -39,8 +46,7 @@
 <script setup>
 import { useI18n } from 'vue-i18n'
 import wilList from '@/components/mobile/wil-list/index.vue'
-import checkIcon from '@/static/check.png'
-import checkActive from '@/static/check-active.png'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 import { useSelectFolder } from '@/hooks/useSelectFolder'
 import { useThemeColors } from '@/hooks/useThemeColors'
 import { useThemeClass } from '@/hooks/useThemeClass'
@@ -56,7 +62,7 @@ const props = defineProps({
 
 const emits = defineEmits(['openSource', 'confirm'])
 
-const { data, key, selectName, responseAdapter, handleData, handleSize, chooseName, toBack, getFileList, clickCell, setImg, confirm } = useSelectFolder({
+const { data, key, selectName, responseAdapter, handleData, handleSize, chooseName, toBack, getFileList, clickCell, fileIconOf, confirm } = useSelectFolder({
   selectType: props.selectType,
   selectMedia: props.selectMedia,
   result: props.result,
@@ -150,12 +156,15 @@ const { iconColor } = useThemeColors()
               width: 60rpx;
               height: 60rpx;
               object-fit: cover;
+            }
 
-              &:first-child {
-                width: 40rpx;
-                height: 40rpx;
-                margin-right: 20rpx;
-              }
+            .cell-check {
+              font-size: 40rpx;
+              margin-right: 20rpx;
+            }
+
+            .cell-glyph {
+              font-size: 60rpx;
             }
           }
         }

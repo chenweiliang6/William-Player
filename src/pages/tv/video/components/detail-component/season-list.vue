@@ -4,8 +4,7 @@
             :scrollIntoView="scrollIntoView">
             <div class="season-list-item" v-for="(item, index) in props.list" :key="item.season"
                 :class="[tabIndex === index ? 'season-list-active' : '']" :id="'name' + (index + 1)">
-                <image src="@/static/season-black.png" v-if="tabIndex === index"></image>
-                <image src="@/static/season-gray.png" v-else></image>
+                <wil-icon name="season"></wil-icon>
                 <span>{{ item.name }}</span>
             </div>
         </tv-scroll>
@@ -13,6 +12,7 @@
 </template>
 
 <script setup>
+import wilIcon from "@/components/common/wil-icon/index.vue";
 import { ref } from 'vue'
 import tvScroll from "@/components/tv/tv-scroll/index.vue";
 import { debounce } from "@/utils/scrape";
@@ -77,9 +77,9 @@ defineExpose({
         padding: 30rpx 40rpx;
         border-radius: 16rpx;
 
-        image {
-            width: 80rpx;
-            height: 80rpx;
+        .iconfont {
+            font-size: 80rpx;
+            color: #c5c6d0;
         }
 
         span {
@@ -92,6 +92,10 @@ defineExpose({
 
     .season-list-active {
         background: #e5e6ec;
+
+        .iconfont {
+            color: #000015;
+        }
 
         span {
             color: #000015;

@@ -1,10 +1,10 @@
 <template>
   <div class="search">
     <div class="search-title">
-      <img src="@/static/rect-leftblack.png" style="cursor: pointer" @click="back" />
+      <wil-icon name="arrow-left-copy" custom-color="#000000" class="search-back" @click="back" />
       <el-input v-model="searchValue" :placeholder="t('video.inputVideoNameSearch')" clearable @keydown.enter="toSearch" @clear="toSearch">
         <template #prefix>
-          <img src="@/static/search-black.png" />
+          <wil-icon name="sousuo" custom-color="#000000" />
         </template>
       </el-input>
       <el-button @click="toSearch">{{ t('video.search') }}</el-button>
@@ -41,13 +41,15 @@
 </template>
 
 <script setup lang="ts">
+import { getMovieTvData } from '@/utils/scrape'
 import { ref } from 'vue'
 import { ElInput, ElButton, ElTabs, ElTabPane } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import wilList from '@/components/mobile/wil-list/index.vue'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 import posterEmpty from '@/static/poster-empty.png'
 import * as CONFIG from '@/utils/config'
-import { handleSeasonName } from '@/utils/scrape.js'
+import { handleSeasonName } from '@/utils/scrape'
 import type { TabPaneName } from 'element-plus'
 import { getMainView, getEmbyList, setEmbyImg } from '@/utils/emby'
 import dayjs from 'dayjs'
@@ -73,6 +75,21 @@ const selectMedia = ref<Record<string, any>>({})
 
 const back = () => {
   router.go(-1)
+}
+
+// 搜索结果的详情跳转（模板里 @click="toDetail(item)" 一直绑着但函数没定义，
+// 导致点击必抛 toDetail is not defined）。
+const toDetail = (item: any) => {
+  router.push({
+    path: '/homeDetail',
+    query: {
+      name: handleSeasonName(item.name, true),
+      type: item.type == '1' ? 'tv' : 'movie',
+      source: JSON.stringify(item.source),
+      movieTvId: item.movieTvId,
+      workKey: item.workKey || '',
+    },
+  })
 }
 
 const setEmptyImg = (poster: string) => {
@@ -140,7 +157,7 @@ const toSearch = () => {
     return
   }
   if (route.query.isEmby !== '1') {
-    let data = uni.getStorageSync('localMovieTvData')
+    let data = getMovieTvData()
     movieArr.value = data.movie.filter((item: any) => item.name.indexOf(searchValue.value) > -1)
     tvArr.value = data.tv.filter((item: any) => item.name.indexOf(searchValue.value) > -1)
     requestParams.value = {}
@@ -213,10 +230,10 @@ initTabsList()
   .search-title {
     display: flex;
     align-items: center;
-    img {
-      width: 40rpx;
-      height: 40rpx;
+    .search-back {
+      font-size: 40rpx;
       margin-right: 36rpx;
+      cursor: pointer;
     }
     :deep(.el-input) {
       line-height: 80rpx;

@@ -1,148 +1,172 @@
 <template>
   <div :class="['catelog-mulu', themeClass]">
-    <div class="catelog-mulu-item" v-for="item in listData" :key="item.name" @click="event => clickItem(event, item)">
-      <div class="item-top">
-        <image :src="titleType == 'tv' ? xspBlack : dyBlack"  />
-        <span>{{ titleText }}</span>
-      </div>
-      <div class="item-bottom">
-        <image :src="mapping[item.type]"  />
-        <div class="item-bottom-right">
-          <div class="right-name">{{ item.name }}</div>
-          <div class="right-path">{{ item.path }}</div>
+    <!-- 媒体库：自动识别、进海报墙 -->
+    <div class="group-title">{{ t('folderPicker.mediaGroup') }}</div>
+    <div v-if="mediaList.length" class="group-list">
+      <div class="catelog-mulu-item" v-for="item in mediaList" :key="item.path" @click="onItemClick(item)">
+        <div class="item-top">
+          <image v-if="getSourceIcon(item.type).kind === 'image'" :src="getSourceIcon(item.type).value" class="item-top-icon" />
+          <wil-icon v-else :name="getSourceIcon(item.type).value" class="item-top-icon item-top-glyph" />
+          <span>{{ item.name }}</span>
+        </div>
+        <div class="item-bottom">
+          <div class="item-bottom-right">
+            <div class="right-path">{{ item.path }}</div>
+            <div v-if="item.inheritChildren" class="right-badge">{{ t('folderPicker.inheritBadge') }}</div>
+          </div>
         </div>
       </div>
     </div>
-    <div class="catelog-mulu-add catelog-mulu-item" @click="toSelectSource">
+    <div v-else class="group-empty">{{ t('folderPicker.noImport') }}</div>
+
+    <!-- 仅资源库：不识别，按原始目录树浏览 -->
+    <div class="group-title">{{ t('folderPicker.resourceGroup') }}</div>
+    <div v-if="resourceList.length" class="group-list">
+      <div class="catelog-mulu-item" v-for="item in resourceList" :key="item.path" @click="onItemClick(item)">
+        <div class="item-top">
+          <image v-if="getSourceIcon(item.type).kind === 'image'" :src="getSourceIcon(item.type).value" class="item-top-icon" />
+          <wil-icon v-else :name="getSourceIcon(item.type).value" class="item-top-icon item-top-glyph" />
+          <span>{{ item.name }}</span>
+        </div>
+        <div class="item-bottom">
+          <div class="item-bottom-right">
+            <div class="right-path">{{ item.path }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div v-else class="group-empty">{{ t('folderPicker.noImport') }}</div>
+
+    <!-- 添加：跳到目录树多选页 -->
+    <div class="catelog-mulu-add catelog-mulu-item" @click="toPicker">
       <div class="catelog-mulu-add__icon">
         <nut-icon name="uploader" :custom-color="iconColorMuted"></nut-icon>
       </div>
+      <span class="add-text">{{ t('folderPicker.addImport') }}</span>
     </div>
-    <nut-popup v-model:visible="showBottom" position="bottom" round @closed="showModel = 'source'">
-      <select-source @openFolder="openFolder" v-if="showModel === 'source'"></select-source>
-      <select-folder
-        v-if="showModel === 'folder'"
-        :selectType="selectType"
-        :selectMedia="selectMedia"
-        :result="res"
-        :title="titleText"
-        @openSource="openSource"
-        @confirm="confirm"></select-folder>
-    </nut-popup>
+
     <Popover v-model:visible="showPopover" :options="popoverOptions" :position="position"></Popover>
   </div>
 </template>
 
 <script setup>
 import { computed, ref } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
-import selectSource from './components/select-source.vue'
-import selectFolder from './components/select-folder.vue'
-import xspBlack from '@/static/xsp-black.png'
-import dyBlack from '@/static/dy-black.png'
-import webdavFileIcon from '@/static/webdav-fileIcon.png'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import Popover from './components/popover.vue'
-import tongbuIcon from '@/static/tongbu-icon.png'
-import editIcon from '@/static/edit_icon.png'
-import deleteIcon from '@/static/delete-icon.png'
+import wilIcon from '@/components/common/wil-icon/index.vue'
+import { getSourceIcon } from '@/utils/sources/sourceIcon'
 import { useThemeNavbar } from '@/hooks/useThemeNavbar'
 import { useThemeClass } from '@/hooks/useThemeClass'
 import { useThemeColors } from '@/hooks/useThemeColors'
 import { useI18n } from 'vue-i18n'
+import { readMulu, removeEntry, addEntries, TARGET } from '@/utils/sources/mulu'
 
 const { t } = useI18n()
 useThemeNavbar()
 const themeClass = useThemeClass()
 const { iconColorMuted } = useThemeColors()
-const muluData = ref(uni.getStorageSync('muluData') || {})
-const listData = ref([])
-const showBottom = ref(false)
-const showModel = ref('source')
-const selectType = ref({})
-const selectMedia = ref({})
-const res = ref({})
+
 const routerParams = ref({})
+const sourceType = ref('')
+const sourceName = ref('')
+const entries = ref([])
 
 const showPopover = ref(false)
 const selectItem = ref({})
 const position = ref({})
-const titleType = computed(() => {
-  const mapping = {
-    [t('video.tv')]: 'tv',
-    [t('video.movie')]: 'movie',
-    '电视剧': 'tv',
-    '电影': 'movie',
-  }
-  return mapping[routerParams.value.title]
+
+// 源图标（与 source-list 保持一致）
+
+// 当前源账号的条目；未指定账号时展示全部
+const accountEntries = computed(() => {
+  const all = entries.value || []
+  if (!sourceType.value) return all
+  return all.filter(e => e.type === sourceType.value && (!sourceName.value || e.name === sourceName.value))
 })
-const titleText = computed(() => (titleType.value == 'tv' ? t('video.tv') : t('video.movie')))
 
-const handleGx = () => {}
+const mediaList = computed(() => accountEntries.value.filter(e => (e.target || TARGET.MEDIA) === TARGET.MEDIA))
+const resourceList = computed(() => accountEntries.value.filter(e => e.target === TARGET.RESOURCE))
 
-// const handleEdit = () => {}
-
-const handleDelete = () => {
-  listData.value = listData.value.filter(item => item.name != selectItem.value.name || item.path != selectItem.value.path)
-  muluData.value[titleType.value] = listData.value
-  uni.setStorageSync('muluData', muluData.value)
+const reload = () => {
+  entries.value = readMulu().entries || []
 }
 
-const popoverOptions = computed(() => [
-  // { icon: tongbuIcon, label: '刮削', color: '#1B1B1B', func: handleGx },
-  // { icon: editIcon, label: '修改', color: '#1B1B1B', func: handleEdit },
-  { icon: deleteIcon, label: t('common.delete'), color: '#FE4344', func: handleDelete },
-])
+const popoverOptions = computed(() => {
+  const item = selectItem.value || {}
+  const isMedia = (item.target || TARGET.MEDIA) === TARGET.MEDIA
+  // 课程/教程这类非影视目录不用删除，改成「仅资源库」即可：
+  // 目录仍在资源库里可浏览，但不再参与刮削（对齐爆米花的「仅在资源库展示」）。
+  const switchOpt = isMedia
+    ? { icon: 'wenjianjia', label: t('folderPicker.switchToResource'), func: handleSwitchTarget }
+    : { icon: 'wenjianjia', label: t('folderPicker.switchToMedia'), func: handleSwitchTarget }
+  return [switchOpt, { icon: 'shanchu', iconColor: '#FE4344', label: t('common.delete'), color: '#FE4344', func: handleDelete }]
+})
 
-const mapping = {
-  'WebDAV': webdavFileIcon,
-  '天翼云盘':
-    'https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/8c/87/69/8c8769f2-6bfa-19b2-53a4-9e10a555deb3/AppIcon-0-0-1x_U007emarketing-0-7-0-0-sRGB-85-220.png/350x350.png',
-  '夸克网盘':
-    'https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/60/6f/e5/606fe5ab-3bfb-c5e4-5bed-08c9b2b5188f/AppIcon-0-0-1x_U007emarketing-0-7-0-0-85-220.png/350x350.png?',
-}
-
-const clickItem = (event, item) => {
+const onItemClick = (event, item) => {
   selectItem.value = item
   showPopover.value = true
-  position.value.clientX = event.clientX || event.touches[0].clientX
-  position.value.clientY = event.clientY - 44 || event.touches[0].clientY
+  position.value.clientX = event.clientX || event.touches?.[0]?.clientX || 0
+  position.value.clientY = (event.clientY || event.touches?.[0]?.clientY || 0) - 44
 }
 
-const toSelectSource = () => {
-  showBottom.value = true
+const handleDelete = () => {
+  const item = selectItem.value
+  if (!item) return
+  removeEntry({ type: item.type, name: item.name, path: item.path })
+  // 删掉媒体库目录后需要重新刮削，海报墙才会随之更新
+  if ((item.target || TARGET.MEDIA) === TARGET.MEDIA) uni.setStorageSync('isreload', true)
+  reload()
 }
 
-//打开selectFolder
-const openFolder = (selectType1, selectMedia1, res1) => {
-  selectType.value = selectType1
-  selectMedia.value = selectMedia1
-  res.value = res1
-  showModel.value = 'folder'
+/**
+ * 在「媒体库」与「仅资源库」之间切换。
+ *
+ * 不能走 removeEntry —— 那会把条目删掉（用户还想去资源库里浏览），
+ * 而且会让 syncHistoryPlay 把该目录下的播放记录一并过滤掉。
+ * addEntries 对已存在的条目只更新 target，正是这里要的语义。
+ */
+const handleSwitchTarget = () => {
+  const item = selectItem.value
+  if (!item) return
+  const isMedia = (item.target || TARGET.MEDIA) === TARGET.MEDIA
+  const next = isMedia ? TARGET.RESOURCE : TARGET.MEDIA
+  addEntries({
+    type: item.type,
+    name: item.name,
+    picked: [{ path: item.path, folderFileId: item.folderFileId, inheritChildren: item.inheritChildren }],
+    target: next,
+  })
+  // 两种情况都要重刮：移出媒体库要清掉它刮出来的条目，
+  // 移回媒体库要把它加进海报墙。
+  uni.setStorageSync('isreload', true)
+  uni.showToast({
+    title: isMedia ? t('folderPicker.switchedToResource') : t('folderPicker.switchedToMedia'),
+    icon: 'none',
+  })
+  reload()
 }
 
-const openSource = () => {
-  showModel.value = 'source'
-}
-
-const confirm = data => {
-  showBottom.value = false
-  showModel.value = 'source'
-  muluData.value = data
-  listData.value = muluData.value[titleType.value]
+const toPicker = () => {
+  if (!sourceType.value || !sourceName.value) {
+    uni.showToast({ title: t('source.pleaseAddSourceFirst'), icon: 'none' })
+    return
+  }
+  // 从「导入目录管理」进来同样是调整既有目录，用 edit 模式回填，才能在这里取消已导入目录
+  uni.navigateTo({
+    url: `/pages/mobile/media/folder-picker?type=${encodeURIComponent(sourceType.value)}&name=${encodeURIComponent(sourceName.value)}&mode=edit`,
+  })
 }
 
 onLoad(options => {
-  muluData.value = uni.getStorageSync('muluData') || {}
-  if (!muluData.value.tv) muluData.value.tv = []
-  if (!muluData.value.movie) muluData.value.movie = []
-  routerParams.value = options
-  listData.value = muluData.value[titleType.value]
+  routerParams.value = options || {}
+  sourceType.value = decodeURIComponent(options?.type || '')
+  sourceName.value = decodeURIComponent(options?.name || '')
   setTimeout(() => {
-    uni.setNavigationBarTitle({
-      title: titleType.value == 'tv' ? t('navbar.tvCatelogSetting') : t('navbar.movieCatelogSetting'),
-    })
+    uni.setNavigationBarTitle({ title: t('folderPicker.manage') })
   }, 40)
 })
+
+onShow(reload)
 </script>
 
 <style lang="scss" scoped>
@@ -152,138 +176,109 @@ page {
 }
 
 .catelog-mulu {
-  display: flex;
-  flex-wrap: wrap;
-  // align-items: flex-start;
-  align-content: flex-start;
-  padding: 24rpx;
   width: 100%;
-  height: 100%;
-  overflow: hidden;
+  min-height: 100%;
+  padding: 24rpx;
+  box-sizing: border-box;
   background: var(--app-bg);
   color: var(--app-text-primary);
+  display: flex;
+  flex-direction: column;
+}
 
-  .catelog-mulu-item {
-    flex: 0 0 calc(50% - 12rpx);
-    overflow: hidden;
-    background: var(--app-bg-card);
-    border-radius: 16rpx;
-    height: 250rpx;
-    display: flex;
-    flex-direction: column;
-    margin-top: 24rpx;
-    margin-left: 24rpx;
+.group-title {
+  font-size: 26rpx;
+  color: var(--app-text-tertiary);
+  padding: 24rpx 8rpx 12rpx;
+}
 
-    .item-top {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex: 0 0 150rpx;
-      background: var(--app-bg-secondary);
-      border-radius: 16rpx 16rpx 0 0;
+.group-list {
+  background: var(--app-bg-card);
+  border-radius: 16rpx;
+  overflow: hidden;
+}
 
-      image {
-        width: 70rpx;
-        height: 70rpx;
-      }
+.group-empty {
+  padding: 32rpx;
+  text-align: center;
+  font-size: 26rpx;
+  color: var(--app-text-tertiary);
+  background: var(--app-bg-card);
+  border-radius: 16rpx;
+}
 
-      span {
-        font-size: 40rpx;
-        font-weight: bold;
-        padding-left: 20rpx;
-        color: var(--app-text-primary);
-      }
-    }
+.catelog-mulu-item {
+  padding: 24rpx;
+  background: var(--app-bg-card);
+  border-bottom: 2rpx solid var(--app-border);
 
-    .item-bottom {
-      display: flex;
-      align-items: center;
-      flex: 1;
-      padding-left: 24rpx;
-      padding-right: 12rpx;
-      overflow: hidden;
+  &:last-child {
+    border-bottom: none;
+  }
+}
 
-      image {
-        flex: 0 0 70rpx;
-        width: 70rpx;
-        height: 70rpx;
-        border-radius: 16rpx;
-      }
+.item-top {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  font-size: 30rpx;
+  color: var(--app-text-primary);
 
-      .item-bottom-right {
-        flex: 1;
-        margin-left: 24rpx;
-        overflow: hidden;
-
-        .right-name {
-          font-size: 28rpx;
-          color: var(--app-text-secondary);
-          display: -webkit-box;
-          -webkit-line-clamp: 1;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          width: 100%;
-          word-break: break-all;
-        }
-
-        .right-path {
-          font-size: 24rpx;
-          margin-top: 8rpx;
-          color: var(--app-text-tertiary);
-          display: -webkit-box;
-          -webkit-line-clamp: 1;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          width: 100%;
-          word-break: break-all;
-        }
-      }
-    }
-
-    &:first-child {
-      margin-top: 0;
-    }
-
-    &:nth-child(2) {
-      margin-top: 0;
-    }
-
-    &:nth-child(2n + 1) {
-      margin-left: 0;
-    }
+  .item-top-icon {
+    width: 40rpx;
+    height: 40rpx;
+    border-radius: 50%;
   }
 
-  .catelog-mulu-add {
-    align-items: center;
-    justify-content: center;
+  .item-top-glyph {
+    width: auto;
+    height: auto;
+    border-radius: 0;
+    font-size: 40rpx;
+    color: var(--app-icon-strong);
+  }
+}
 
-    &:active {
-      background: var(--app-bg-secondary);
-    }
+.item-bottom {
+  display: flex;
+  align-items: center;
+  padding-top: 10rpx;
+}
 
-    .catelog-mulu-add__icon {
-      border-radius: 50%;
-      background: var(--app-border-strong);
-      width: 70rpx;
-      height: 70rpx;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
+.item-bottom-right {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+
+  .right-path {
+    font-size: 24rpx;
+    color: var(--app-text-tertiary);
+    word-break: break-all;
   }
 
-  :deep(.nut-popup) {
-    height: 50%;
-    overflow: hidden;
-    background: var(--app-bg);
+  .right-badge {
+    font-size: 22rpx;
+    color: var(--app-brand);
+    border: 2rpx solid var(--app-brand);
+    border-radius: 8rpx;
+    padding: 0 8rpx;
+    flex-shrink: 0;
   }
+}
 
-  &.dark {
-    .item-top image {
-      filter: invert(1);
-    }
+.catelog-mulu-add {
+  margin-top: 32rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  border-radius: 16rpx;
+  border: 2rpx dashed var(--app-border);
+
+  .add-text {
+    font-size: 28rpx;
+    color: var(--app-text-tertiary);
   }
 }
 </style>

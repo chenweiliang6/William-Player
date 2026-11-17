@@ -1,8 +1,9 @@
+import { getMovieTvData } from '@/utils/scrape'
 import { ref, nextTick, onMounted, computed } from 'vue'
 import { onShow, onLoad } from '@dcloudio/uni-app'
 import emptyBg from '@/static/empty_bg.png'
 import { toStringfy } from '../pages/mobile/mine/common'
-import { handleSeasonName, handleSecond, parseTime } from '@/utils/scrape.js'
+import { handleSeasonName, handleSecond, parseTime } from '@/utils/scrape'
 import posterEmpty from '@/static/poster-empty.png'
 import * as CONFIG from '@/utils/config'
 import { getEmbyList, getGenresList } from '../utils/emby'
@@ -21,12 +22,23 @@ export function useVideoAll({ wil_list, route = null }) {
     const mapping = {
       [t('video.movie')]: 'movie',
       [t('video.tv')]: 'tv',
+      [t('video.anime')]: 'anime',
+      [t('video.variety')]: 'variety',
+      [t('video.documentary')]: 'documentary',
+      // 「其他」分区收纳未识别条目，列表页按 unidentified 取数
+      [t('video.other')]: 'unidentified',
       电影: 'movie',
       电视剧: 'tv',
+      动漫: 'anime',
+      综艺: 'variety',
+      纪录片: 'documentary',
+      其他: 'unidentified',
     }
     return mapping[title]
   }
-  const getMediaType = () => routerParams.value.mediaType || getTypeByTitle(routerParams.value.title)
+  // 展示分类：优先用路由显式传入的 category，其次按标题反推。
+  // 注意它可能是 anime/variety/documentary，不只是 movie/tv。
+  const getMediaType = () => routerParams.value.category || getTypeByTitle(routerParams.value.title)
 
   const routerParams = ref({})
 
@@ -202,8 +214,14 @@ export function useVideoAll({ wil_list, route = null }) {
           total: res.length,
         }
       } else if (getMediaType()) {
-        let res = uni.getStorageSync('localMovieTvData') || {}
-        let arr = res[getMediaType()] || []
+        let res = getMovieTvData() || {}
+        const cat = getMediaType()
+        // 分类页签优先走 byCategory（能分出动漫/综艺/纪录片）；
+        // 旧库没有 byCategory 时回退到 movie/tv 两桶
+        let arr = res.byCategory?.[cat]?.length
+          ? res.byCategory[cat]
+          : (cat === 'movie' || cat === 'tv' ? (res[cat] || []) : [])
+        arr = arr.slice()
         arr.forEach(item => {
           item.loadImg = true
         })
@@ -213,7 +231,7 @@ export function useVideoAll({ wil_list, route = null }) {
           total: arr.length,
         }
       } else {
-        let res = uni.getStorageSync('localMovieTvData') || {}
+        let res = getMovieTvData() || {}
         let arr = []
         arr.push(...res.movie.filter(i => i.genre_ids?.indexOf(+routerParams.value.genreId) > -1))
         arr.push(...res.tv.filter(i => i.genre_ids?.indexOf(+routerParams.value.genreId) > -1))
@@ -247,7 +265,7 @@ export function useVideoAll({ wil_list, route = null }) {
       }
     } else {
       uni.navigateTo({
-        url: `/pages/${CONFIG.PLATFORM_DIR}/video/video-detail?path=${item.path}&name=${handleSeasonName(item.name, true)}&type=${item.type == '1' ? 'tv' : 'movie'}&source=${JSON.stringify(item.source)}&movieTvId=${item.movieTvId}`,
+        url: `/pages/${CONFIG.PLATFORM_DIR}/video/video-detail?path=${item.path}&name=${handleSeasonName(item.name, true)}&type=${item.type == '1' ? 'tv' : 'movie'}&source=${JSON.stringify(item.source)}&movieTvId=${item.movieTvId}&workKey=${encodeURIComponent(item.workKey || '')}`,
       })
     }
   }
@@ -324,11 +342,31 @@ export function useVideoAll({ wil_list, route = null }) {
       最近观看: 'video.recentPlayed',
       电视剧: 'video.tv',
       电影: 'video.movie',
+      动漫: 'video.anime',
+      综艺: 'video.variety',
+      纪录片: 'video.documentary',
       [t('video.recentPlayed')]: 'video.recentPlayed',
       [t('video.tv')]: 'video.tv',
       [t('video.movie')]: 'video.movie',
+      [t('video.anime')]: 'video.anime',
+      [t('video.variety')]: 'video.variety',
+      [t('video.documentary')]: 'video.documentary',
     }
-    titleKey.value = routerParams.value.genreKey || titleMapping[routerParams.value.title] || ''
+    // 分类页签优先用 route 的 category 直接取翻译，
+    // 不再依赖多语言字符串反推（换语言后容易失配）
+    const CATEGORY_TITLE_KEY = {
+      movie: 'video.movie',
+      tv: 'video.tv',
+      anime: 'video.anime',
+      variety: 'video.variety',
+      documentary: 'video.documentary',
+      unidentified: 'video.other',
+    }
+    titleKey.value =
+      routerParams.value.genreKey ||
+      CATEGORY_TITLE_KEY[routerParams.value.category] ||
+      titleMapping[routerParams.value.title] ||
+      ''
     displayTitle.value = titleKey.value ? t(titleKey.value) : routerParams.value.title
     listKind.value = routerParams.value.listKind || (routerParams.value.title == '最近观看' || routerParams.value.title == t('video.recentPlayed') ? 'recent' : 'all')
     routerParams.value.isConnected = routerParams.value.isConnected1 == 'true' ? true : false

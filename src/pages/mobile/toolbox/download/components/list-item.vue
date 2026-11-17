@@ -7,21 +7,22 @@
         </div>
         <div class="container-left-info">
           <div class="container-left-info__name">{{ props.data.name }}</div>
-          <div class="container-left-info__error" v-if="props.data.status === 'ERROR'">{{ t('toolbox.downloadFailed') }}</div>
+          <div class="container-left-info__error" v-if="isError">{{ errorText }}</div>
           <div class="container-left-info__size" v-else>
             <span class="size-value">{{ props.data.status === 'COMPLETED' ? props.data.total_size : props.data.current_size + ' / ' + props.data.total_size }}</span>
             <template v-if="props.data.status !== 'COMPLETED'">
               <span class="size-icon"></span>
-              <span class="size-rate">{{ props.data.speed || '0KB/s' }}</span>
+              <span class="size-rate">{{ rateText }}</span>
             </template>
           </div>
         </div>
       </div>
       <div class="container-right">
-        <image class="theme-icon" src="@/static/pause-black.png" @click.stop="pauseById(props.data.id)" v-if="props.data.status === 'DOWNLOADING'"  />
-        <image class="theme-icon" src="@/static/play-black.png" @click.stop="resumeById(props.data.id)" v-if="props.data.status === 'PAUSED'"  />
-        <image class="theme-icon" src="@/static/reload-black.png" @click.stop="resumeById(props.data.id)" v-if="props.data.status === 'ERROR'"  />
-        <image src="@/static/delete-icon.png" @click.stop="deleteById(props.data)"  />
+        <wil-icon name="zanting" class="theme-icon" @click.stop="pauseById(props.data.id)" v-if="isRunning" />
+        <wil-icon name="icon_play" class="theme-icon" @click.stop="resumeById(props.data.id)" v-if="props.data.status === 'PAUSED'" />
+        <!-- 直链过期（3007）重试无解，只保留删除，让用户重新添加 -->
+        <wil-icon name="reload" class="theme-icon" @click.stop="resumeById(props.data.id)" v-if="isError && !isLinkExpired" />
+        <wil-icon name="shanchu" class="delete-icon" @click.stop="deleteById(props.data)" />
       </div>
     </div>
     <div class="list-item__progress">
@@ -36,7 +37,9 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import wilProgress from '@/components/mobile/wil-progress/index.vue'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -45,6 +48,20 @@ const props = defineProps({
 })
 
 const emits = defineEmits(['pauseById', 'resumeById', 'deleteById'])
+
+//进行中的状态（v2 的 WAITING/CONNECTING 也要按进行中渲染，否则按钮会消失）
+const RUNNING_STATUS = ['DOWNLOADING', 'WAITING', 'CONNECTING']
+const isRunning = computed(() => RUNNING_STATUS.includes(props.data.status))
+const isError = computed(() => props.data.status === 'ERROR')
+//3007 = 云盘直链签名过期，重试无解，只能删除后重新添加
+const isLinkExpired = computed(() => props.data.errorCode === 3007)
+
+const errorText = computed(() => (isLinkExpired.value ? t('toolbox.downloadLinkExpired') : props.data.errorMsg || t('toolbox.downloadFailed')))
+
+const rateText = computed(() => {
+  if (props.data.status === 'WAITING') return t('toolbox.downloadWaiting')
+  return props.data.speedText || '0 B/s'
+})
 
 const pauseById = id => {
   emits('pauseById', id)
@@ -112,20 +129,17 @@ const deleteById = item => {
     }
     .container-right {
       display: flex;
-      image {
+      .iconfont {
         display: block;
-        width: 40rpx;
-        height: 40rpx;
+        font-size: 40rpx;
+        color: var(--app-icon-strong);
         &:last-child {
           margin-left: 24rpx;
         }
       }
-    }
-  }
-  &.dark,
-  :global(.dark) & {
-    .theme-icon {
-      filter: invert(1);
+      .delete-icon {
+        color: var(--app-danger);
+      }
     }
   }
   .list-item__progress {

@@ -15,7 +15,7 @@
       @getTrackList="getTrackList"
     ></player-control>
     <div class="mpv-player-loading" v-if="mpvData.loading">
-      <img src="@/static/loading-white.png" />
+      <wil-icon name="jiazaizhong" custom-color="#ffffff" />
     </div>
   </div>
 </template>
@@ -24,6 +24,7 @@
 import { ref, watch, nextTick, onBeforeUnmount, reactive, onMounted } from 'vue'
 import Mpv from './mpv.js'
 import playerControl from './player-control.vue'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 import NoSleep from 'nosleep.js'
 import { ipc } from '@/utils/ipcRenderer'
 import { ipcApiRoute } from '@/utils/ipcApiRoute'
@@ -311,9 +312,8 @@ watch(
     left: 0;
     top: 0;
 
-    img {
-      width: 80rpx;
-      height: 80rpx;
+    .iconfont {
+      font-size: 80rpx;
       animation: spin-reverse 1s linear infinite reverse;
     }
   }

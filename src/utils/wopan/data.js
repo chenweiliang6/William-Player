@@ -48,9 +48,10 @@ export const ensureWopanSession = async credential => {
  * @param {object} credential {accessToken, refreshToken}
  * @param {number} pageNum 页码（0 起）
  * @param {number} pageSize
+ * @param {number} [timeout] 单页请求超时，不传时用 httpPost 的 20000 默认值
  * @returns {Promise<Array>} wopan File 数组
  */
-export const queryWopanFilesPage = (folderId, credential, pageNum = 0, pageSize = 100) =>
+export const queryWopanFilesPage = (folderId, credential, pageNum = 0, pageSize = 100, timeout) =>
   requestWoHome({
     key: 'QueryAllFiles',
     param: {
@@ -64,24 +65,32 @@ export const queryWopanFilesPage = (folderId, credential, pageNum = 0, pageSize 
     other: { secret: true },
     accessToken: credential.accessToken,
     refreshToken: credential.refreshToken,
+    timeout,
   })
 
 /**
  * 拉取目录全部文件（循环分页，对齐 Alist wopan driver List）
  * 映射为与天翼云盘一致的 fileListAO 结构，供上层零改动复用
+ * @param {object} [opts] { timeout } 刮削时用来取消超时限制，每一页都用同一个值
  * @returns {Promise<{fileListAO: {fileList, folderList, count}}>}
  */
-export const listWopanFiles = async (folderId, credential) => {
+export const listWopanFiles = async (folderId, credential, opts = {}) => {
   const pageSize = 100
   let pageNum = 0
   const all = []
   for (;;) {
-    const data = await queryWopanFilesPage(folderId, credential, pageNum, pageSize)
+    const data = await queryWopanFilesPage(folderId, credential, pageNum, pageSize, opts.timeout)
     const files = data.files || []
     all.push(...files)
     if (files.length < pageSize) break
     pageNum++
   }
+  //联通接口未返回独立的更新时间，缺失时回退到 createTime，
+  //保持与天翼/移动一致的字段契约，避免上层各自兜底
+  const pickTime = v => ({
+    createTime: v.createTime,
+    updateTime: v.updateTime || v.modifyTime || v.createTime,
+  })
   const fileList = all
     .filter(v => v.type != 0)
     .map(v => ({
@@ -89,7 +98,7 @@ export const listWopanFiles = async (folderId, credential) => {
       fid: v.fid,
       name: v.name,
       size: Number(v.size || 0),
-      createTime: v.createTime,
+      ...pickTime(v),
       thumbUrl: v.thumbUrl,
     }))
   const folderList = all
@@ -97,7 +106,7 @@ export const listWopanFiles = async (folderId, credential) => {
     .map(v => ({
       id: v.id,
       name: v.name,
-      createTime: v.createTime,
+      ...pickTime(v),
     }))
   return {
     fileListAO: {

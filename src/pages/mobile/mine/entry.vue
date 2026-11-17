@@ -3,6 +3,7 @@
 </template>
 
 <script setup>
+import { getMovieTvData } from '@/utils/scrape'
 import { onBeforeMount } from 'vue'
 import { loginByPhone, getWeUserByopenId } from '@/network/apis'
 import { encrypt } from '@/utils/jsencrypt.js'
@@ -15,7 +16,7 @@ onBeforeMount(async () => {
   }
   if (CONFIG.IS_TV) {
     //tv端跳转到tv的首页
-    let localMovieTvData = uni.getStorageSync('localMovieTvData')
+    let localMovieTvData = getMovieTvData()
     let settingData = uni.getStorageSync('settingData')
     if (settingData) {
       settingData.tmdbKey = '9e0add7c02b66868ab0a368df820a335'

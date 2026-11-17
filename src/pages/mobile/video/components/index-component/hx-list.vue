@@ -17,16 +17,20 @@
     <div class="hxList-list">
       <scroll-view class="hxList-list-scroll" :scroll-x="true" style="width: 100%" :enhanced="true" :showScrollbar="false">
         <div class="hxList-list-movie">
-          <div class="hxList-list-movie__item" v-for="item in listData1" :key="item.name" @click="toVideoDetail(item)">
-            <image
-              :src="!props.isConnected && !item.loadImg ? emptyBg : setEmptyImg(item.poster)"
-              style="object-fit: cover"
-              @error="imgError(item)"
-              @load="imgLoad(item)"
-              mode="aspectFill"
-            />
+          <div class="hxList-list-movie__item" v-for="item in listData1" :key="item.workKey || (item.name + (item.type || ''))" @click="toVideoDetail(item)">
+            <div class="hxList-list-movie__poster">
+              <image
+                :src="!props.isConnected && !item.loadImg ? emptyBg : setEmptyImg(item.poster)"
+                style="object-fit: cover"
+                @error="imgError(item)"
+                @load="imgLoad(item)"
+                mode="aspectFill"
+              />
+              <!-- 评分徽标：对齐爆米花，贴在海报右下角 -->
+              <span v-if="showVote(item)" class="hxList-list-movie__vote">{{ voteText(item) }}</span>
+            </div>
             <span class="hxList-list-movie__item-name">{{ removeExtension(item.name) }}</span>
-            <span class="hxList-list-movie__item-time">{{ item.releaseTime || t('video.noReleaseTime') }}</span>
+            <span class="hxList-list-movie__item-time">{{ cardSubText(item, t) }}</span>
           </div>
         </div>
       </scroll-view>
@@ -34,11 +38,12 @@
   </div>
 </template>
 <script setup>
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, watch } from 'vue'
 import emptyBg from '@/static/empty_bg.png'
 import posterEmpty from '@/static/poster-empty.png'
 import { onShow } from '@dcloudio/uni-app'
 import { handleSeasonName } from '@/utils/scrape'
+import { showVote, voteText, cardSubText } from '@/utils/card-meta'
 import * as CONFIG from '@/utils/config'
 import { useI18n } from 'vue-i18n'
 
@@ -46,15 +51,23 @@ const { t } = useI18n()
 const props = defineProps({
   title: { type: String, default: '' },
   type: { type: String, default: '' },
+  // 展示分类（movie/tv/anime/variety/documentary），用于「查看全部」带参
+  category: { type: String, default: '' },
   listData: { type: Array, default: [] },
+  // 库内容版本号。刮削边刮边显示时，列表会在页面不重新挂载的情况下增长，
+  // 而 listData1 是从 props 复制出来的快照，必须靠它触发重建。
+  revision: { type: Number, default: 0 },
   isConnected: { type: Boolean, default: false }, //手机是否连接网络
 })
 
 const emits = defineEmits(['clickAll'])
-const listData1 = ref(JSON.parse(JSON.stringify(props.listData)).slice(0, 30))
-listData1.value.forEach(item => {
-  item.loadImg = true
-})
+
+// 只取前 30 条做展示。注意顺序：**先 slice 再构造新对象**。
+// 早期写法是 JSON.parse(JSON.stringify(props.listData)).slice(0, 30)，
+// 先把整个数组序列化+反序列化一遍才截断——某个分区上万条时，
+// 这是首页首屏最大的一笔开销（onShow 每个分区都要重跑一次）。
+const takeTop = list => (list || []).slice(0, 30).map(item => ({ ...item, loadImg: true }))
+const listData1 = ref(takeTop(props.listData))
 
 const removeExtension = filename => {
   let name = handleSeasonName(filename, true)
@@ -68,12 +81,20 @@ const embyTypeMapping = {
   'Series': 'tv',
   'Movie': 'movie',
 }
-const getTypeByTitle = () => {
+// 详情页需要的是媒体类型（movie/tv），不是展示分类。
+// 优先用条目自带的 type（'1'=剧集，'2'=电影），它始终反映真实媒体类型；
+// 分类页签只能表达展示分组（动漫里既有电影也有剧集）。
+const getItemMediaType = item => {
+  if (item?.type === '1' || item?.type === 1) return 'tv'
+  if (item?.type === '2' || item?.type === 2) return 'movie'
+  // 兜底：按展示分类猜
+  if (props.category === 'movie') return 'movie'
+  if (['tv', 'anime', 'variety', 'documentary'].includes(props.category)) return 'tv'
   const typeMapping = {
     [t('video.movie')]: 'movie',
     [t('video.tv')]: 'tv',
-    '电影': 'movie',
-    '电视剧': 'tv',
+    电影: 'movie',
+    电视剧: 'tv',
   }
   return typeMapping[props.title]
 }
@@ -84,7 +105,7 @@ const toVideoDetail = item => {
     })
   } else {
     uni.navigateTo({
-      url: `/pages/mobile/video/video-detail?path=${item.path}&name=${handleSeasonName(item.name, true)}&type=${getTypeByTitle()}&source=${JSON.stringify(item.source)}&movieTvId=${item.movieTvId}`,
+      url: `/pages/mobile/video/video-detail?path=${item.path}&name=${handleSeasonName(item.name, true)}&type=${getItemMediaType(item)}&source=${JSON.stringify(item.source)}&movieTvId=${item.movieTvId}&workKey=${encodeURIComponent(item.workKey || '')}`,
     })
   }
 }
@@ -94,7 +115,7 @@ const toVideoAll = () => {
     emits('clickAll')
   } else {
     uni.navigateTo({
-      url: `/pages/mobile/video/video-all?title=${props.title}&isConnected1=${props.isConnected}`,
+      url: `/pages/mobile/video/video-all?title=${props.title}&category=${props.category}&isConnected1=${props.isConnected}`,
     })
   }
 }
@@ -120,26 +141,23 @@ const setEmptyImg = poster => {
   }
 }
 
-onShow(() => {
+const rebuild = () => {
   nextTick(() => {
-    listData1.value = JSON.parse(JSON.stringify(props.listData)).slice(0, 30)
-    listData1.value.forEach(item => {
-      item.loadImg = true
-    })
+    listData1.value = takeTop(props.listData)
   })
-})
-</script>
-<style lang="scss" scoped>
-@keyframes opacityIn {
-  0% {
-    opacity: 0;
-  }
-
-  100% {
-    opacity: 1;
-  }
 }
 
+onShow(rebuild)
+
+// 刮削边刮边显示：库增长时父组件会递增 revision，这里必须重建快照，
+// 否则列表会停在页面首次挂载时的内容上（老流程靠 refreshLoading 的
+// v-if/v-else 切换重新挂载子树来达成，新流程不再整页重挂）。
+watch(
+  () => [props.revision, props.listData],
+  rebuild,
+)
+</script>
+<style lang="scss" scoped>
 .hxList {
   width: 100%;
   margin-bottom: 50rpx;
@@ -196,12 +214,30 @@ onShow(() => {
         .hxList-list-movie__item {
           margin-left: 24rpx;
           flex: 0 0 214rpx;
+          position: relative;
+          transition: opacity var(--app-duration-fast) var(--app-ease);
 
-          image {
-            object-fit: cover;
+          // 按压反馈：整卡压一层暗色，不改变尺寸，避免影响横向排列宽度计算
+          &::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
-            height: 320rpx;
+            height: 100%;
             border-radius: 20rpx;
+            background: rgba(0, 0, 0, 0.18);
+            opacity: 0;
+            transition: opacity var(--app-duration-fast) var(--app-ease);
+            pointer-events: none;
+          }
+
+          &:active::after {
+            opacity: 1;
+          }
+
+          &:active {
+            opacity: 0.92;
           }
 
           &-name {
@@ -221,14 +257,36 @@ onShow(() => {
           &:first-child {
             margin-left: 0;
           }
-        }
 
-        .is-move {
-          transition: transform 0.3s ease;
-        }
+          // 海报容器与评分徽标放在 &:active 之后单独写完整选择器。
+          // 写在 &-name 之后用 & 组合会接续 &:active 的组合器，导致
+          // position:absolute 失效、徽标退回文档流左上角。
+          .hxList-list-movie__poster {
+            position: relative;
+            width: 100%;
+            height: 320rpx;
+          }
 
-        .is-new {
-          animation: opacityIn 0.3s ease;
+          .hxList-list-movie__poster image {
+            object-fit: cover;
+            width: 100%;
+            height: 320rpx;
+            border-radius: 20rpx;
+          }
+
+          .hxList-list-movie__vote {
+            position: absolute;
+            right: 8rpx;
+            bottom: 8rpx;
+            padding: 0 10rpx;
+            height: 34rpx;
+            line-height: 34rpx;
+            border-radius: 8rpx;
+            background: rgba(0, 0, 0, 0.6);
+            color: #ffc93c;
+            font-size: 22rpx;
+            font-weight: bold;
+          }
         }
       }
     }

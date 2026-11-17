@@ -110,6 +110,12 @@ const cellOptions = computed(() => [
       path: '/pages/mobile/media/list',
     },
     {
+      // 资源库已成为底部 tabBar 页，入口走 switchTab（tabBar 页不能用 navigateTo）
+      key: 'resourceLibrary',
+      title: t('navbar.resourceLibrary'),
+      leftIcon: iconMedia,
+    },
+    {
       key: 'dataSync',
       title: t('navbar.dataSync'),
       leftIcon: iconTb,
@@ -287,6 +293,11 @@ const judgeLogin = () => {
 const clickCell = item => {
   if (item.key === 'logout') {
     toLogout()
+  }
+  if (item.key === 'resourceLibrary') {
+    // 资源库是 tabBar 页，必须用 switchTab
+    uni.switchTab({ url: '/pages/mobile/source/source-list' })
+    return
   }
   if (item.tip) {
     uni.showToast({

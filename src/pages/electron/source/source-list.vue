@@ -2,7 +2,7 @@
   <div class="source-list">
     <wil-title :title="t('navbar.resourceLibrary')">
       <template #right>
-        <img src="@/static/jia-black.png" @click="openDialog" />
+        <wil-icon name="jia" custom-color="#000015" @click="openDialog" />
       </template>
     </wil-title>
     <div class="source-list-container" v-if="show">
@@ -17,21 +17,19 @@
               @click="handleSelect(item, vitem)"
             >
               <div class="list-item-img">
-                <image :src="item.img"></image>
+                <image v-if="getSourceIcon(item.type).kind === 'image'" :src="getSourceIcon(item.type).value"></image>
+                <wil-icon v-else :name="getSourceIcon(item.type).value" class="list-item-glyph" />
               </div>
               <div class="list-item-name" :class="[vitem.active ? 'list-item-activeName' : '']">{{ vitem.name }}</div>
               <div class="list-item-button">
                 <wil-tooltip :content="t('common.modify')" placement="top" trigger="hover">
-                  <img src="@/static/bianji-black.png" @click.stop="editSource(item, vitem)" />
+                  <wil-icon name="bianji" custom-color="#000015" @click.stop="editSource(item, vitem)" />
                 </wil-tooltip>
-                <wil-tooltip :content="t('source.setTvDirectory')" placement="top" trigger="hover" v-if="route.query.isEmby !== '1'">
-                  <img src="@/static/xsp-black.png" @click.stop="setTvMulu(item, vitem)" />
-                </wil-tooltip>
-                <wil-tooltip :content="t('source.setMovieDirectory')" placement="top" trigger="hover" v-if="route.query.isEmby !== '1'">
-                  <img src="@/static/dy-black.png" @click.stop="setMovieMulu(item, vitem)" />
+                <wil-tooltip :content="t('folderPicker.manage')" placement="top" trigger="hover" v-if="route.query.isEmby !== '1'">
+                  <wil-icon name="xianshiping" custom-color="#000015" @click.stop="openImportDirectory(item, vitem)" />
                 </wil-tooltip>
                 <wil-tooltip :content="t('common.delete')" placement="top" trigger="hover">
-                  <img src="@/static/delete-icon.png" @click.stop="deleteSource(item, vitem)" />
+                  <wil-icon name="shanchu" custom-color="#fe4344" @click.stop="deleteSource(item, vitem)" />
                 </wil-tooltip>
               </div>
             </div>
@@ -52,11 +50,11 @@
     <nut-dialog v-model:visible="showDialog" @closed="closedDialog">
       <template #header>
         <div class="header-left" @click="back">
-          <img src="@/static/rect-leftblack.png" v-if="showType !== 'fileSource' && dialogMode !== 'edit'" />
+          <wil-icon name="arrow-left-copy" custom-color="#000000" v-if="showType !== 'fileSource' && dialogMode !== 'edit'" />
           <span>{{ dialogTitle }}</span>
         </div>
         <div class="header-right" @click="cancel">
-          <img src="@/static/close-black.png" />
+          <wil-icon name="guanbi" custom-color="#000015" />
         </div>
       </template>
       <template #default>
@@ -83,11 +81,15 @@
 </template>
 
 <script setup>
+import { clearLibrary } from '@/utils/scrape'
+import { clearAccount } from '@/utils/sources/mulu'
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import wilForm from '@/components/mobile/wil-form/index.vue'
 import wilTooltip from '@/components/electron/wil-tooltip/index.vue'
 import wilModal from '@/components/mobile/wil-modal/index.vue'
 import fileSource from './components/file-source.vue'
+import wilIcon from '@/components/common/wil-icon/index.vue'
+import { getSourceIcon } from '@/utils/sources/sourceIcon'
 import { validateWebdav, validateEmby } from '@/utils/validate'
 import { useRoute, useRouter } from 'vue-router'
 import { toParse, toStringfy } from '@/pages/mobile/mine/common'
@@ -367,6 +369,16 @@ const cancel = () => {
   closedDialog()
 }
 
+/**
+ * 保存成功后进目录树（对齐爆米花：加源/改源末端都要选目录）。
+ * PC 端走 vue-router，不用 uni.navigateTo。
+ * 弹窗必须先关掉，否则返回时会看到表单页还压在列表上。
+ */
+const gotoPicker = (type, name, mode) => {
+  cancel()
+  router.push({ path: '/folder-picker', query: { type, name, mode } })
+}
+
 const closedDialog = () => {
   showType.value = 'fileSource'
   dialogMode.value = 'add'
@@ -380,20 +392,21 @@ const confirm = () => {
   if (showType.value === 'WebDAV') {
     wil_form.value.confirmCommit().then(async valid => {
       if (valid) {
-        validateWebdav(currentValidateActionTitle, state.formData, state.oldData, { address: state.formData.address, isActive: state.editObj.active ? '1' : '0' }, false).then(
-          () => {
+        validateWebdav(currentValidateActionTitle, state.formData, state.oldData, { address: state.oldData.address, isActive: state.editObj.active ? '1' : '0' }, false).then(
+          res => {
             judgeShow()
+            sourceList.value = uni.getStorageSync('sourceList')
+            // 只有校验/登录真的成功才会返回 res（失败时内部已 toast 并返回 undefined）
+            if (!res) return
+            gotoPicker('WebDAV', state.formData.name, currentDialogMode === 'add' ? 'add' : 'edit')
           }
-        ) //校验，抽成一个方法了
-        showDialog.value = false
-        cancel()
-        sourceList.value = uni.getStorageSync('sourceList')
+        )
       }
     })
   } else if (showType.value === 'Emby') {
     wil_form.value.confirmCommit().then(async valid => {
       if (valid) {
-        validateEmby(isAddMode.value, state.formData, state.oldData, { address: state.formData.address, isActive: state.editObj.active ? '1' : '0' }, false).then(
+        validateEmby(isAddMode.value, state.formData, state.oldData, { address: state.oldData.address, isActive: state.editObj.active ? '1' : '0' }, false).then(
           () => {
             judgeShow()
           }
@@ -434,13 +447,15 @@ const confirm = () => {
           } else if (currentDialogMode === 'edit') {
             let same = cloudQuark.list.find(i => i.name === state.editObj.name)
             same.name = res.data.nickname
-            same.Cookie = obj.JSESSIONID
+            // 原写法是 obj.JSESSIONID，该作用域没有 obj —— 编辑夸克时 Cookie 从来没被真正写回
+            same.Cookie = state.formData.cookie
             if (state.editObj.active) {
               uni.setStorageSync('isreload', true)
             }
           }
           uni.setStorageSync('sourceList', sourceList.value)
           judgeShow()
+          gotoPicker('夸克网盘', res.data.nickname, currentDialogMode === 'add' ? 'add' : 'edit')
         } catch (error) {
           uni.showToast({ title: t('source.invalidCookie'), icon: 'none' })
         }
@@ -497,8 +512,7 @@ const confirmWopan = async currentDialogMode => {
     uni.setStorageSync('sourceList', sourceList.value)
     uni.showToast({ title: t('common.saveSuccess'), icon: 'none' })
     judgeShow()
-    showDialog.value = false
-    cancel()
+    gotoPicker('联通云盘', phone, currentDialogMode === 'add' ? 'add' : 'edit')
   } catch (e) {
     uni.showToast({ title: e.message || t('source.loginFailed'), icon: 'none' })
   } finally {
@@ -535,8 +549,7 @@ const confirm139 = async currentDialogMode => {
     uni.setStorageSync('sourceList', sourceList.value)
     uni.showToast({ title: t('common.saveSuccess'), icon: 'none' })
     judgeShow()
-    showDialog.value = false
-    cancel()
+    gotoPicker('移动云盘', phone, currentDialogMode === 'add' ? 'add' : 'edit')
   } catch (e) {
     const tip =
       e.code === 'CLOUD139_RISK_CONTROL'
@@ -578,6 +591,7 @@ const confirmTianyiCookie = async currentDialogMode => {
     }
     uni.setStorageSync('sourceList', sourceList.value)
     judgeShow()
+    gotoPicker('天翼云盘', res.loginName, currentDialogMode === 'add' ? 'add' : 'edit')
   } catch (error) {
     uni.showToast({ title: t('source.invalidCookie'), icon: 'none' })
   }
@@ -636,8 +650,7 @@ const doTianyiAccountLogin = async (username, password, validateCode, currentDia
     uni.setStorageSync('sourceList', sourceList.value)
     uni.showToast({ title: t('common.saveSuccess'), icon: 'none' })
     judgeShow()
-    showDialog.value = false
-    cancel()
+    gotoPicker('天翼云盘', tokenInfo.loginName, currentDialogMode === 'add' ? 'add' : 'edit')
   } catch (e) {
     uni.showToast({ title: e.message || t('source.loginFailed'), icon: 'none' })
     // 登录失败刷新登录参数（验证码场景）
@@ -834,25 +847,12 @@ const editSource = (item, vitem) => {
   showDialog.value = true
 }
 
-//设置电视剧目录
-const setTvMulu = async (item, vitem) => {
-  //后续写完目录设置页面加上路由跳转，跳转到目录设置页面，可以设置所有资源的目录
+// 导入目录：目录不再分电影/电视剧，勾选后选择导入到媒体库或资源库
+const openImportDirectory = (item, vitem) => {
+  // 同样是调整既有目录，用 edit 模式回填，才能在这里取消已导入目录
   router.push({
-    path: '/catelog-mulu',
-    query: {
-      mediaType: 'tv',
-    },
-  })
-}
-
-//设置电影目录
-const setMovieMulu = async (item, vitem) => {
-  //后续写完目录设置页面加上路由跳转，跳转到目录设置页面，可以设置所有资源的目录
-  router.push({
-    path: '/catelog-mulu',
-    query: {
-      mediaType: 'movie',
-    },
+    path: '/folder-picker',
+    query: { type: item.type, name: vitem.name, mode: 'edit' },
   })
 }
 
@@ -865,8 +865,10 @@ const deleteSource = (item, vitem) => {
     confirm: async () => {
       item.list = item.list.filter(i => i.name != vitem.name)
       uni.setStorageSync('sourceList', sourceList.value)
+      // 同步清掉该账号的导入目录，否则下次同名账号添加会带出脏目录
+      clearAccount({ type: item.type, name: vitem.name })
       if (vitem.active) {
-        uni.removeStorageSync('localMovieTvData')
+        clearLibrary()
       }
       let historyPlay = uni.getStorageSync('historyPlay')
       historyPlay = historyPlay.filter(v => v.sourceType != item.type || v.sourceName != vitem.name)
@@ -898,10 +900,9 @@ page {
 
   :deep(.wil-title) {
     .wil-title-right {
-      img {
+      .iconfont {
         display: block;
-        width: 40rpx;
-        height: 40rpx;
+        font-size: 40rpx;
       }
     }
   }
@@ -982,6 +983,15 @@ page {
               top: 40%;
               transform: translate(-50%, 0);
             }
+
+            .list-item-glyph {
+              font-size: 40rpx;
+              color: #666;
+              position: absolute;
+              left: 50%;
+              top: 40%;
+              transform: translate(-50%, 0);
+            }
           }
 
           .list-item-name {
@@ -1011,9 +1021,8 @@ page {
               }
             }
 
-            img {
-              width: 40rpx;
-              height: 40rpx;
+            .iconfont {
+              font-size: 40rpx;
               display: block;
               // margin-left: 24rpx;
               cursor: pointer;
@@ -1079,9 +1088,8 @@ page {
           align-items: center;
           cursor: pointer;
 
-          img {
-            width: 40rpx;
-            height: 40rpx;
+          .iconfont {
+            font-size: 40rpx;
           }
 
           span {
@@ -1090,10 +1098,9 @@ page {
         }
 
         .header-right {
-          img {
+          .iconfont {
             cursor: pointer;
-            width: 25rpx;
-            height: 25rpx;
+            font-size: 25rpx;
             display: block;
           }
         }

@@ -109,6 +109,17 @@ const getPhoneCityAndCarrier = data => {
   })
 }
 
+/**
+ * 判断来源条目是否处于激活状态。
+ * 历史上 WebDAV/Emby/天翼写布尔 true，联通/移动写字符串 '1'/'0'。
+ * 字符串 '0' 在 JS 中是真值，直接用 i.active 会把未激活项误判为已激活，
+ * 所以统一在这里做严格判断。
+ */
+const isSourceActive = item => item?.active === true || item?.active === '1'
+
+//在 sourceList 分组里找出激活条目
+const findActiveSource = list => (Array.isArray(list) ? list.find(isSourceActive) : undefined)
+
 //获取当前选择的是哪个资源，isEmby是true的话就获取选中的emby资源，不是就是正常资源
 const judgeSelect = (type = 'all') => {
   let sourceList = uni.getStorageSync('sourceList') || []
@@ -116,7 +127,7 @@ const judgeSelect = (type = 'all') => {
   let selectMedia = {}
   if (type === 'emby') {
     const embySource = sourceList.find(item => item.type === 'Emby')
-    const activeItem = embySource?.list?.find(item => item.active)
+    const activeItem = findActiveSource(embySource?.list)
     if (activeItem) {
       selectMedia = activeItem
       selectType = embySource
@@ -124,17 +135,18 @@ const judgeSelect = (type = 'all') => {
     return { selectType, selectMedia }
   } else if (type === 'normal') {
     // 非Emby场景:遍历找有active的组
-    const nonEmbySource = sourceList.find(item => item.type !== 'Emby' && item.list?.some(i => i.active)) || {}
-    const activeItem = nonEmbySource?.list?.find(item => item.active)
+    const nonEmbySource = sourceList.find(item => item.type !== 'Emby' && item.list?.some(isSourceActive)) || {}
+    const activeItem = findActiveSource(nonEmbySource?.list)
     if (activeItem) {
-      selectMedia.value = activeItem
-      selectType.value = nonEmbySource
+      // 这里原先误写成 selectMedia.value，普通对象没有 .value，会导致选源结果为空
+      selectMedia = activeItem
+      selectType = nonEmbySource
     }
     return { selectType, selectMedia }
   } else {
     selectType =
       sourceList.find(item => {
-        let select = item.list.find(i => i.active)
+        let select = findActiveSource(item.list)
         if (select) {
           selectMedia = select
         }
@@ -175,4 +187,4 @@ const getFormatIcon = format => {
   }
 }
 
-export { parseM3UToArray, groupByGroupTitle, groupByName, getPhoneCityAndCarrier, judgeSelect, getFormatIcon }
+export { parseM3UToArray, groupByGroupTitle, groupByName, getPhoneCityAndCarrier, judgeSelect, getFormatIcon, isSourceActive, findActiveSource }

@@ -54,6 +54,7 @@ import appLogo from "@/static/app-logo1.png";
 import tvPage from "@/components/tv/tv-page/index.vue";
 import tvForm from '@/components/tv/tv-form/index.vue'
 import { validateWebdav, validateEmby } from "@/utils/validate";
+import { openFolderPicker, FOLDER_PICKER_PATH } from '@/utils/sources/picker';
 import { onLoad } from "@dcloudio/uni-app";
 import { initLoginParam, login189 } from "@/utils/cloud189/login.js";
 import { persist189Token, save189Password } from "@/utils/cloud189/store.js";
@@ -71,6 +72,8 @@ const wopan_form = ref(null)
 const cloud139_form = ref(null)
 
 const routerParams = ref({})
+// edit = 从 TV 资源库的「编辑」进入：回填表单，保存后进目录树调整目录
+const isEditMode = ref(false)
 
 let port = "";
 let timer = null;
@@ -314,13 +317,26 @@ const confirmSubmit = () => {
     if (activeTab.value === 'WebDAV') {
         webdav_form.value.submitForm(valid => {
             if (valid) {
-                validateWebdav(!routerParams.value.type, state.webdavFormData,state.webdavOldData, {})
+                validateWebdav(!isEditMode.value, state.webdavFormData, state.webdavOldData, {
+                    // validate 的编辑分支靠 routerParams.address 定位要改写的条目，TV 必须显式传
+                    address: state.webdavOldData.address,
+                    isActive: '1',
+                }, true, {
+                    pickerPath: FOLDER_PICKER_PATH.tv,
+                    // TV 是从首页设置弹层 → code-input，回退 1 层即回到首页
+                    addBackDelta: 1,
+                    editBackDelta: 1,
+                })
             }
         })
     } else if (activeTab.value === 'Emby') {
         emby_form.value.submitForm(valid => {
             if (valid) {
-                validateEmby(!routerParams.value.type, state.embyFormData,state.embyOldData, {})
+                // Emby 是服务端媒体库，没有扫描目录概念，不入目录树
+                validateEmby(!isEditMode.value, state.embyFormData, state.embyOldData, {
+                    address: state.embyOldData.address,
+                    isActive: '1',
+                })
             }
         })
     } else if (activeTab.value === '天翼云盘') {
@@ -375,8 +391,14 @@ const doCloud189Login = async validateCode => {
         save189Password(tokenInfo.loginName, state.cloud189FormData.username, state.cloud189FormData.password)
         uni.showToast({ title: isNew ? t('source.addAccountSuccess') : t('source.modifyAccountSuccess'), icon: 'none' })
         uni.setStorageSync('isreload', true)
+        // 新增和修改都进目录树：新增首次勾选，修改回填已导入目录后调整
         setTimeout(() => {
-            uni.switchTab({ url: '/pages/mobile/video/index' })
+            openFolderPicker({
+                type: '天翼云盘',
+                name: tokenInfo.loginName,
+                mode: isNew ? 'add' : 'edit',
+                path: FOLDER_PICKER_PATH.tv,
+            })
         }, 1500)
     } catch (e) {
         uni.showToast({ title: e.message || t('source.loginFailed'), icon: 'none' })
@@ -404,11 +426,16 @@ const submitWopan = async () => {
             uni.showToast({ title: t('source.wopanSmsSent'), icon: 'none' })
             return
         }
-        persistWopanToken({ phone, accessToken: result.accessToken, refreshToken: result.refreshToken }, {})
-        uni.showToast({ title: t('source.addAccountSuccess'), icon: 'none' })
+        const { isNew, loginName } = persistWopanToken({ phone, accessToken: result.accessToken, refreshToken: result.refreshToken }, {})
+        uni.showToast({ title: isNew ? t('source.addAccountSuccess') : t('source.modifyAccountSuccess'), icon: 'none' })
         uni.setStorageSync('isreload', true)
         setTimeout(() => {
-            uni.switchTab({ url: '/pages/mobile/video/index' })
+            openFolderPicker({
+                type: '联通云盘',
+                name: loginName || phone,
+                mode: isNew ? 'add' : 'edit',
+                path: FOLDER_PICKER_PATH.tv,
+            })
         }, 1500)
     } catch (e) {
         uni.showToast({ title: e.message || t('source.loginFailed'), icon: 'none' })
@@ -425,11 +452,16 @@ const submit139 = async () => {
     try {
         const result = await login139(phone, password)
         save139Password(phone, phone, password)
-        const { isNew } = persist139Token({ phone, authorization: result.authorization, account: result.account }, {})
+        const { isNew, loginName } = persist139Token({ phone, authorization: result.authorization, account: result.account }, {})
         uni.showToast({ title: isNew ? t('source.addAccountSuccess') : t('source.modifyAccountSuccess'), icon: 'none' })
         uni.setStorageSync('isreload', true)
         setTimeout(() => {
-            uni.switchTab({ url: '/pages/mobile/video/index' })
+            openFolderPicker({
+                type: '移动云盘',
+                name: loginName || phone,
+                mode: isNew ? 'add' : 'edit',
+                path: FOLDER_PICKER_PATH.tv,
+            })
         }, 1500)
     } catch (e) {
         // 风控/账密错误映射为专用提示，其余按 message 兜底
@@ -479,8 +511,66 @@ onMounted(() => {
 
 });
 
+/**
+ * 编辑模式回填。
+ *
+ * 天翼 / 联通 / 移动的表单本身就是「登录表单」，没有可回填的凭据（token 不能反推账密），
+ * 重新登录即覆盖旧 token，所以这几种类型只切换 tab、不回填。
+ * 夸克的编辑在打开 webview 时就已经处理，不落到本页。
+ */
+const applyEditData = (type, name) => {
+    const sourceList = uni.getStorageSync('sourceList') || []
+    const group = sourceList.find(g => g.type === type)
+    const cred = group?.list?.find(i => i.name === name)
+    if (!cred) {
+        uni.showToast({ title: t('source.pleaseAddSourceFirst'), icon: 'none' })
+        return
+    }
+    // 切到对应 tab（夸克不在 tabs 里做表单，单独跳 webview）
+    const idx = tabsList.value.findIndex(tab => tab.value === type)
+    if (idx >= 0) tabIndex.value = idx
+    activeTab.value = type
+
+    if (type === 'WebDAV') {
+        state.webdavFormData = {
+            name: cred.name,
+            protocol: cred.protocol || 'http',
+            address: cred.address,
+            port: cred.port,
+            username: cred.username,
+            password: cred.password,
+        }
+        state.webdavOldData = JSON.parse(JSON.stringify(state.webdavFormData))
+    } else if (type === 'Emby') {
+        state.embyFormData = {
+            name: cred.name,
+            protocol: cred.protocol || 'http',
+            address: cred.address,
+            port: cred.port,
+            Username: cred.Username,
+            Pw: cred.Pw,
+        }
+        state.embyOldData = JSON.parse(JSON.stringify(state.embyFormData))
+    }
+}
+
 onLoad((options) => {
-    routerParams.value = options
+    routerParams.value = options || {}
+    const mode = decodeURIComponent(options?.mode || '')
+    const type = decodeURIComponent(options?.type || '')
+    const name = decodeURIComponent(options?.name || '')
+    if (mode !== 'edit' || !type) return
+
+    isEditMode.value = true
+    if (type === '夸克网盘') {
+        // 夸克没有表单可填，编辑等同重新扫码/抓 Cookie。
+        // webview 结束后会回退 2 层（webview → code-input → 首页），再从首页进目录树。
+        uni.navigateTo({
+            url: `/pages/mobile/backend/quark-webview?platform=TV&url=${encodeURIComponent('https://pan.quark.cn')}`,
+        })
+        return
+    }
+    applyEditData(type, name)
 })
 </script>
 

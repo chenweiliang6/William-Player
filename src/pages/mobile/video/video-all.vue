@@ -7,9 +7,9 @@
           :custom-color="iconColor"
           size="20"
           @click="showPopover = true"
-          v-if="[t('video.movie'), t('video.tv'), '电影', '电视剧'].includes(routerParams.title)"
+          v-if="showSortButton"
         ></nut-icon>
-        <sort-popover :type="getTypeByTitle(routerParams.title)" v-model="showPopover" @changeSort="changeSort"></sort-popover>
+        <sort-popover :type="routerParams.category || getTypeByTitle(routerParams.title)" v-model="showPopover" @changeSort="changeSort"></sort-popover>
       </template>
     </wil-navbar>
     <div class="video-all-list">
@@ -42,9 +42,16 @@
                 @error="imgError(item)"
                 @load="imgLoad(item)"
                 />
+              <!-- 评分徽标：对齐爆米花，贴在海报右下角 -->
+              <span v-if="showVote(item)" class="item-vote">{{ voteText(item) }}</span>
             </div>
             <span class="item-name">{{ removeExtension(item) }}</span>
-            <span class="item-time" v-if="!item.notShowTime">{{ item.releaseTime || t('video.noReleaseTime') }}</span>
+            <span class="item-time" v-if="!item.notShowTime">{{ cardSubText(item, t) }}</span>
+            <!-- 未识别条目：提供手动修正匹配的入口。
+                 自动匹配覆盖不到的情况（片名与 TMDB 名毫无关联）靠它兜底 -->
+            <span v-if="item.unidentified" class="item-fix" @click.stop="toFixMatch(item)">
+              {{ t('video.fixMatch') }}
+            </span>
           </div>
         </template>
       </wil-list>
@@ -59,8 +66,9 @@ import posterEmpty from '@/static/poster-empty.png'
 import wilNavbar from '@/components/mobile/wil-navbar/index.vue'
 import sortPopover from './components/index-component/sort-popover.vue'
 import wilTabs from '@/components/mobile/wil-tabs/index.vue'
-import { ref, onBeforeUnmount } from 'vue'
+import { computed, ref, onBeforeUnmount } from 'vue'
 import { useVideoAll } from '@/hooks/useVideoAll'
+import { showVote, voteText, cardSubText } from '@/utils/card-meta'
 import { onUnload } from '@dcloudio/uni-app'
 import { useThemeClass } from '@/hooks/useThemeClass'
 import { useThemeColors } from '@/hooks/useThemeColors'
@@ -96,6 +104,25 @@ const {
   imgLoad,
   removeExtension,
 } = useVideoAll({ wil_list })
+
+/**
+ * 修正未识别条目的匹配。
+ * 带上 workKey，search-match 页会直接改写新库里的这条 Work，
+ * 而不是走旧的 resetMovieTv 临时缓存。
+ */
+const toFixMatch = item => {
+  const type = item.type === '1' || item.type === 1 ? 'tv' : 'movie'
+  const query = encodeURIComponent(removeExtension(item) || '')
+  uni.navigateTo({
+    url: `/pages/mobile/video/search-match?type=${type}&workKey=${encodeURIComponent(item.workKey || '')}&query=${query}`,
+  })
+}
+
+// 只有本地媒体库的分类页签支持排序；Emby 与流派筛选页不显示
+const showSortButton = computed(() => {
+  if (routerParams.value.type === 'emby') return false
+  return !!routerParams.value.category || !!getTypeByTitle(routerParams.value.title)
+})
 </script>
 
 <style lang="scss" scoped>
@@ -181,6 +208,21 @@ page {
               color: var(--app-text-tertiary);
               padding-top: 6rpx;
               display: block;
+            }
+
+            // 评分徽标：贴在海报右下角（.item-poster 已是 position: relative）
+            .item-vote {
+              position: absolute;
+              right: 8rpx;
+              bottom: 8rpx;
+              padding: 0 10rpx;
+              height: 34rpx;
+              line-height: 34rpx;
+              border-radius: 8rpx;
+              background: rgba(0, 0, 0, 0.6);
+              color: #ffc93c;
+              font-size: 22rpx;
+              font-weight: bold;
             }
           }
 
@@ -280,6 +322,18 @@ page {
               font-size: 24rpx;
               color: var(--app-text-tertiary);
               padding-top: 6rpx;
+            }
+
+            // 未识别条目的「修正匹配」入口
+            .item-fix {
+              display: inline-block;
+              margin-top: 8rpx;
+              padding: 2rpx 12rpx;
+              font-size: 22rpx;
+              line-height: 32rpx;
+              border-radius: 16rpx;
+              border: 1rpx solid var(--app-brand);
+              color: var(--app-brand);
             }
           }
 

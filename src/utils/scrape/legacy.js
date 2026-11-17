@@ -1,4 +1,4 @@
-import { getFolder, get189Folder, getQuarkFolder, getWopanFolder, get139Folder } from './common'
+import { getFolder, get189Folder, getQuarkFolder, getWopanFolder, get139Folder } from '@/utils/common'
 import dayjs from 'dayjs'
 import customParseFormat from 'dayjs/plugin/customParseFormat'
 
@@ -557,7 +557,7 @@ const recursionTv = async (data, parent, tvArr, selectType, selectMedia, refresh
             tvArr.push({
               ...parent,
               createTime: fmtTime(parent.createTime),
-              updateTime: fmtTime(parent.createTime),
+              updateTime: fmtTime(parent.updateTime || parent.createTime),
               folderFileId: data.id,
               season: extractSeasonNumber(data.name),
               seasonPath: parent.path + '/' + data.name,
@@ -570,7 +570,7 @@ const recursionTv = async (data, parent, tvArr, selectType, selectMedia, refresh
               tvArr.push({
                 ...parent,
                 createTime: fmtTime(parent.createTime),
-                updateTime: fmtTime(parent.createTime),
+                updateTime: fmtTime(parent.updateTime || parent.createTime),
                 folderFileId: data.id,
                 season: extractSeasonNumber(data.name),
                 seasonPath: parent.path + '/' + data.name,
@@ -580,7 +580,7 @@ const recursionTv = async (data, parent, tvArr, selectType, selectMedia, refresh
               tvArr.push({
                 ...data,
                 createTime: fmtTime(data.createTime),
-                updateTime: fmtTime(data.createTime),
+                updateTime: fmtTime(data.updateTime || data.createTime),
                 folderFileId: data.id,
                 season: '1',
                 seasonPath: data.path,
@@ -616,7 +616,7 @@ const recursionTv = async (data, parent, tvArr, selectType, selectMedia, refresh
             tvArr.push({
               ...parent,
               createTime: fmtTime(parent.createTime),
-              updateTime: fmtTime(parent.createTime),
+              updateTime: fmtTime(parent.updateTime || parent.createTime),
               folderFileId: data.id,
               season: extractSeasonNumber(data.name),
               seasonPath: parent.path + '/' + data.name,
@@ -629,7 +629,7 @@ const recursionTv = async (data, parent, tvArr, selectType, selectMedia, refresh
               tvArr.push({
                 ...parent,
                 createTime: fmtTime(parent.createTime),
-                updateTime: fmtTime(parent.createTime),
+                updateTime: fmtTime(parent.updateTime || parent.createTime),
                 folderFileId: data.id,
                 season: extractSeasonNumber(data.name),
                 seasonPath: parent.path + '/' + data.name,
@@ -639,7 +639,7 @@ const recursionTv = async (data, parent, tvArr, selectType, selectMedia, refresh
               tvArr.push({
                 ...data,
                 createTime: fmtTime(data.createTime),
-                updateTime: fmtTime(data.createTime),
+                updateTime: fmtTime(data.updateTime || data.createTime),
                 folderFileId: data.id,
                 season: '1',
                 seasonPath: data.path,

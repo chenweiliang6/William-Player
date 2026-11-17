@@ -42,8 +42,9 @@ const router = useRouter()
 const options1 = computed(() => [
     { title: t('pc.mediaLibraryList'), icon: ziyuankuBlack, path: '/mediaList' },
     { title: t('pc.dataSync'), icon: datasyncBlack },
-    { title: t('pc.tvDirectory'), icon: xspBlack, path: '/catelog-mulu', query: { mediaType: 'tv' } },
-    { title: t('pc.movieDirectory'), icon: dyBlack, path: '/catelog-mulu', query: { mediaType: 'movie' } },
+    // 目录不再分电影/电视剧，统一为导入目录管理
+    { title: t('folderPicker.manage'), icon: xspBlack, path: '/catelog-mulu' },
+    { title: t('navbar.resourceLibrary'), icon: ziyuankuBlack, path: '/resource-library' },
 ])
 
 const options2 = computed(() => [

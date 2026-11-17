@@ -8,7 +8,7 @@
                     <div class="popup-container-list" v-for="(litem, lindex) in settings" :key="lindex">
                         <div :class="['list-item', tabIndex === item.index ? 'list-active' : '']" v-for="item in litem"
                             :key="item.key" @click="clickItem(item)">
-                            <image :src="tabIndex === item.index ? item.activeIcon : item.icon"></image>
+                            <wil-icon :name="item.icon"></wil-icon>
                             <span>{{ item.title }}</span>
                         </div>
                     </div>
@@ -20,7 +20,7 @@
                     <div class="popup-container-list">
                         <div :class="['list-item', languageIndex === index ? 'list-active' : '']" v-for="(item, index) in languageList"
                             :key="item.value" @click="chooseLanguage(item.value, index)">
-                            <image :src="languageIndex === index ? languageActiveIcon : languageIcon"></image>
+                            <wil-icon name="language_en"></wil-icon>
                             <span>{{ item.label }}</span>
                             <span class="list-item-check" v-if="item.value === localeStore.locale">✓</span>
                         </div>
@@ -31,7 +31,7 @@
                 ref="source_list" @changeShowType="changeShowType" @openModal="openModal" :title="typeTitle">
             </source-list>
             <catelog-mulu v-if="showType == 'catelogMulu'" :class="[openAnimation ? 'source-enter' : 'source-leave']"
-                ref="catelog_mulu" @changeShowType="changeShowType" :title="typeTitle" :catalogType="catalogType">
+                ref="catelog_mulu" @changeShowType="changeShowType" :title="typeTitle">
             </catelog-mulu>
         </nut-popup>
     </div>
@@ -40,23 +40,8 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 import { useLocaleStore } from '@/stores/locale'
-import ziyuankuGray from '@/static/ziyuanku-gray.png'
-import ziyuankuBlack from '@/static/ziyuanku-black.png'
-import datasyncGray from '@/static/datasync-gray.png'
-import datasyncBlack from '@/static/datasync-black.png'
-import guanyuGray from '@/static/guanyu-gray.png'
-import guanyuBlack from '@/static/guanyu-black.png'
-import xspGray from '@/static/xsp-gray.png'
-import xspBlack from '@/static/xsp-black.png'
-import dyGray from '@/static/dy-gray.png'
-import dyBlack from '@/static/dy-black.png'
-import fankuiGray from '@/static/fankui-gray.png'
-import fankuiBlack from '@/static/fankui-black.png'
-import zanshangGray from '@/static/zanshang-gray.png'
-import zanshangBlack from '@/static/zanshang-black.png'
-import languageIcon from '@/static/language-dark.png'
-import languageActiveIcon from '@/static/language-light.png'
 import sourceList from './source-list.vue'
 import catelogMulu from './catelog-mulu.vue'
 
@@ -64,16 +49,17 @@ const { t } = useI18n()
 const localeStore = useLocaleStore()
 const settings = computed(() => [
     [
-        { key: 'source', icon: ziyuankuGray, activeIcon: ziyuankuBlack, title: t('navbar.resourceLibrary'), index: 0, type: 'source' },
-        { key: 'dataSync', icon: datasyncGray, activeIcon: datasyncBlack, title: t('navbar.dataSync'), index: 1, path: '/pages/tv/mine/data-sync' },
-        { key: 'tvCatalog', icon: xspGray, activeIcon: xspBlack, title: t('navbar.tvCatelogSetting'), index: 2, type: 'catelogMulu', catalogType: 'tv' },
-        { key: 'movieCatalog', icon: dyGray, activeIcon: dyBlack, title: t('navbar.movieCatelogSetting'), index: 3, type: 'catelogMulu', catalogType: 'movie' },
+        { key: 'source', icon: 'ziyuanku', title: t('navbar.resourceLibrary'), index: 0, type: 'source' },
+        { key: 'dataSync', icon: 'shujutongbu', title: t('navbar.dataSync'), index: 1, path: '/pages/tv/mine/data-sync' },
+        // 目录不再分电影/电视剧，统一为「导入目录」：勾选要扫描的目录并选择导入到媒体库或资源库
+        { key: 'importDirectory', icon: 'wenjianjia', title: t('folderPicker.manage'), index: 2, type: 'catelogMulu' },
+        { key: 'resourceLibrary', icon: 'wenjianjia', title: t('navbar.resourceLibrary'), index: 3, path: '/pages/tv/source/resource-library' },
     ],
     [
-        { key: 'language', icon: languageIcon, activeIcon: languageActiveIcon, title: t('settings.language'), index: 4, type: 'language' },
-        { key: 'feedback', icon: fankuiGray, activeIcon: fankuiBlack, title: t('navbar.feedback'), index: 5, path: '/pages/tv/mine/enter-qqgroup' },
-        { key: 'appreciate', icon: zanshangGray, activeIcon: zanshangBlack, title: t('navbar.appreciate'), index: 6, path: '/pages/tv/mine/appreciate' },
-        { key: 'about', icon: guanyuGray, activeIcon: guanyuBlack, title: t('navbar.about'), index: 7, path: '/pages/tv/mine/about-version' },
+        { key: 'language', icon: 'language_en', title: t('settings.language'), index: 4, type: 'language' },
+        { key: 'feedback', icon: 'neibufankui', title: t('navbar.feedback'), index: 5, path: '/pages/tv/mine/enter-qqgroup' },
+        { key: 'appreciate', icon: 'zanshang', title: t('navbar.appreciate'), index: 6, path: '/pages/tv/mine/appreciate' },
+        { key: 'about', icon: 'guanyu', title: t('navbar.about'), index: 7, path: '/pages/tv/mine/about-version' },
     ]
 ])
 const languageList = computed(() => localeStore.supportedLocales)
@@ -85,7 +71,6 @@ const openAnimation = ref(false) //true就是点击跳转，false就是返回
 const source_list = ref(null)
 const catelog_mulu = ref(null)
 const typeTitle = ref('')
-const catalogType = ref('')
 const languageIndex = ref(Math.max(languageList.value.findIndex(item => item.value === localeStore.locale), 0))
 
 const emits = defineEmits(['changeSetting', 'openModal', 'closed'])
@@ -138,7 +123,6 @@ const clickItem = (item) => {
     }
     if (item.type) {
         typeTitle.value = item.title
-        catalogType.value = item.catalogType || ''
         if (item.type === 'language') {
             languageIndex.value = Math.max(languageList.value.findIndex(v => v.value === localeStore.locale), 0)
         }
@@ -235,9 +219,9 @@ defineExpose({
                         padding: 20rpx 24rpx;
                         border-radius: 16rpx;
 
-                        image {
-                            width: 70rpx;
-                            height: 70rpx;
+                        .iconfont {
+                            font-size: 70rpx;
+                            color: #c5c6d0;
                         }
 
                         span {
@@ -256,6 +240,10 @@ defineExpose({
 
                     .list-active {
                         background: #e5e6ec;
+
+                        .iconfont {
+                            color: #000015;
+                        }
 
                         span {
                             color: #000015;

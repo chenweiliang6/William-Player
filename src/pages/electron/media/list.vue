@@ -1,7 +1,7 @@
 <template>
   <div class="media-list">
     <div class="media-list-title" @click="back">
-      <img src="@/static/rect-leftblack.png" />
+      <wil-icon name="arrow-left-copy" custom-color="#000000" class="media-list-back" />
       <span>{{ t('navbar.mediaLibraryList') }}</span>
     </div>
     <div class="media-list-breadcrumb">
@@ -27,7 +27,8 @@
       >
         <template #default="item">
           <div class="media-list-item" @click="clickMedia(item)">
-            <img :src="setFolderImg(item)" />
+            <image v-if="setFolderImg(item).kind === 'image'" :src="setFolderImg(item).value" />
+            <wil-icon v-else :name="setFolderImg(item).value" :custom-color="setFolderImg(item).color" class="media-item-glyph" />
             <div>{{ item.name }}</div>
           </div>
         </template>
@@ -41,7 +42,7 @@
 import { nextTick, reactive, ref } from 'vue'
 import wilList from '@/components/mobile/wil-list/index.vue'
 import { loginUser, get189Folder, getQuarkFolder, getWopanFolder, get139Folder, getWebDAVUrl, get189DownloadUrl, getQuarkVideoUrl, getWopanVideoUrl, get139VideoUrl } from '@/utils/common.js'
-import mediaFolder from '@/static/media-folder.png'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 import { useRouter } from 'vue-router'
 import { ipc } from '@/utils/ipcRenderer'
 import { ipcApiRoute } from '@/utils/ipcApiRoute'
@@ -322,11 +323,13 @@ const getFileList = async data => {
 
 //设置文件照片
 const setFolderImg = item => {
+  // 有缩略图的文件（图片/视频封面）继续用图片显示
   if (item.thumb) {
-    return item.thumb
-  } else {
-    return mediaFolder
+    return { kind: 'image', value: item.thumb }
   }
+  return item.type == '1' || item.isFolder
+    ? { kind: 'glyph', value: 'wenjianjia', color: '#ff6701' }
+    : { kind: 'glyph', value: 'wj', color: '#000000' }
 }
 
 initData()
@@ -351,9 +354,8 @@ page {
     cursor: pointer;
     padding: 24rpx;
 
-    img {
-      width: 40rpx;
-      height: 40rpx;
+    .media-list-back {
+      font-size: 40rpx;
     }
 
     span {
@@ -423,6 +425,10 @@ page {
                 width: 160rpx;
                 height: 160rpx;
                 object-fit: cover;
+              }
+
+              .media-item-glyph {
+                font-size: 160rpx;
               }
 
               div {

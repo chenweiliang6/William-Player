@@ -18,6 +18,7 @@ import appLogo from "@/static/app-logo1.png";
 import { setShareData, deleteShareData, getShareData } from "@/network/apis";
 import { onUnload } from "@dcloudio/uni-app";
 import * as CONFIG from '@/utils/config'
+import { writeMuluFromSync } from '@/utils/sources/mulu'
 
 const { t } = useI18n()
 const wilQrcodeRef = ref(null);
@@ -93,7 +94,8 @@ const startServer = () => {
             if (result?.code != 501) {//过滤掉发送完消息成功之后中止连接的501报错
                 uni.setStorageSync('sourceList', result.sourceList)
                 uni.setStorageSync('historyPlay', result.historyPlay)
-                uni.setStorageSync('muluData', result.muluData)
+                // 跨版本同步：对端可能还是旧的 tv/movie 两桶结构，先迁移成 entries
+                writeMuluFromSync(result.muluData)
                 uni.setStorageSync('isreload', true)
                 uni.reLaunch({
                     url: '/pages/tv/video/index'

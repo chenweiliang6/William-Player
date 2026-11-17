@@ -27,6 +27,7 @@ import wilForm from "@/components/mobile/wil-form/index.vue";
 import wilNavbar from "@/components/mobile/wil-navbar/index.vue";
 import { onLoad } from "@dcloudio/uni-app";
 import { validateEmby } from "@/utils/validate";
+import { renameAccount } from '@/utils/sources/mulu'
 import { useThemeClass } from '@/hooks/useThemeClass'
 import { useThemeColors } from '@/hooks/useThemeColors'
 import { useI18n } from 'vue-i18n'
@@ -73,18 +74,9 @@ const protoColumns = ref([
     { text: "HTTPS", value: "https" },
 ]);
 
-//修改emby的时候，同步修改电视剧电影目录
+// 修改 emby 账号名时同步改名目录配置（Emby 本身不走目录刮削，但保留一致性）
 const editMulu = () => {
-    const muluData = uni.getStorageSync('muluData')
-    let muluMovie = muluData.movie?.find(v => v.name == state.oldData.name)
-    let muluTv = muluData.tv?.find(v => v.name == state.oldData.name)
-    if (muluMovie) {
-        muluMovie.name = state.formData.name
-    }
-    if (muluTv) {
-        muluTv.name = state.formData.name
-    }
-    uni.setStorageSync('muluData', muluData)
+    renameAccount('Emby', state.oldData.name, state.formData.name)
 }
 
 const confirmSubmit = () => {

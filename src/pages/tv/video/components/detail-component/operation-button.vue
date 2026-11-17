@@ -3,10 +3,7 @@
         <div class="operation-button-play"
             :class="[props.focusModel === 'operationButton' && activeButton === 'play' ? 'operation-button-active' : '']"
             @click="toPlay">
-            <image src="@/static/play-black.png"
-                v-if="props.focusModel === 'operationButton' && activeButton === 'play'">
-            </image>
-            <image src="@/static/play-gray.png" v-else></image>
+            <wil-icon name="icon_play"></wil-icon>
             <div class="operation-button-play__text">
                 <span>{{ t('video.watchNow') }}</span>
                 <span>{{ props.title }}</span>
@@ -14,37 +11,27 @@
         </div>
         <div class="operation-button-source operation-button-item" @click="toOpenPopup('source')"
             :class="[props.focusModel === 'operationButton' && activeButton === 'source' ? 'operation-button-active' : '']">
-            <image src="@/static/wangpan-black.png"
-                v-if="props.focusModel === 'operationButton' && activeButton === 'source'"></image>
-            <image src="@/static/wangpan-gray.png" v-else></image>
+            <wil-icon name="dongtaiyemianxiaotubiao06"></wil-icon>
             <span>{{ t('source.selectResource') }}</span>
         </div>
         <div class="operation-button-season operation-button-item" @click="toOpenPopup('season')"
             :class="[props.focusModel === 'operationButton' && activeButton === 'season' ? 'operation-button-active' : '']">
-            <image src="@/static/season-black.png"
-                v-if="props.focusModel === 'operationButton' && activeButton === 'season'"></image>
-            <image src="@/static/season-gray.png" v-else></image>
+            <wil-icon name="season"></wil-icon>
             <span>{{ t('video.season') }}</span>
         </div>
         <div class="operation-button-tvlist operation-button-item" @click="toOpenPopup('tvlist')"
             :class="[props.focusModel === 'operationButton' && activeButton === 'tvlist' ? 'operation-button-active' : '']">
-            <image src="@/static/playlist-black.png"
-                v-if="props.focusModel === 'operationButton' && activeButton === 'tvlist'"></image>
-            <image src="@/static/playlist-gray.png" v-else></image>
+            <wil-icon name="bofangliebiao"></wil-icon>
             <span>{{ t('video.episode') }}</span>
         </div>
         <div class="operation-button-actor operation-button-item" @click="toOpenPopup('actor')"
             :class="[props.focusModel === 'operationButton' && activeButton === 'actor' ? 'operation-button-active' : '']">
-            <image src="@/static/people-black.png"
-                v-if="props.focusModel === 'operationButton' && activeButton === 'actor'"></image>
-            <image src="@/static/people-gray.png" v-else></image>
+            <wil-icon name="yonghu"></wil-icon>
             <span>{{ t('video.castAndCrew') }}</span>
         </div>
         <div class="operation-button-more operation-button-item" @click="toOpenPopup('more')"
             :class="[props.focusModel === 'operationButton' && activeButton === 'more' ? 'operation-button-active' : '']">
-            <image src="@/static/gengduo-black.png"
-                v-if="props.focusModel === 'operationButton' && activeButton === 'more'"></image>
-            <image src="@/static/gengduo-gray.png" v-else></image>
+            <wil-icon name="sx-gd-copy"></wil-icon>
             <span>{{ t('common.more') }}</span>
         </div>
     </div>
@@ -53,6 +40,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 
 const { t } = useI18n()
 
@@ -122,16 +110,16 @@ defineExpose({
         padding: 30rpx 40rpx;
         border-radius: 16rpx;
 
-        image {
-            width: 35rpx;
-            height: 35rpx;
+        .iconfont {
+            font-size: 35rpx;
+            color: var(--content-text-secondary, #c5c6d0);
         }
 
         .operation-button-play__text {
             display: flex;
             flex-direction: column;
             padding-left: 30rpx;
-            color: #c5c6d0;
+            color: var(--content-text-secondary, #c5c6d0);
             font-weight: bold;
             font-size: 32rpx;
 
@@ -149,28 +137,33 @@ defineExpose({
         padding: 30rpx 40rpx;
         border-radius: 16rpx;
 
-        image {
-            width: 35rpx;
-            height: 35rpx;
+        .iconfont {
+            font-size: 35rpx;
+            color: var(--content-text-secondary, #c5c6d0);
         }
 
         span {
             font-size: 32rpx;
-            color: #c5c6d0;
+            color: var(--content-text-secondary, #c5c6d0);
             padding-left: 30rpx;
             font-weight: bold;
         }
     }
 
+    // 焦点态：深浅两套背景都保持对比度
     .operation-button-active {
-        background: #e5e6ec;
+        background: var(--content-surface-strong, rgba(255, 255, 255, 0.24));
+
+        .iconfont {
+            color: var(--content-text, #000015);
+        }
 
         .operation-button-play__text {
-            color: #000015;
+            color: var(--content-text, #000015);
         }
 
         span {
-            color: #000015;
+            color: var(--content-text, #000015);
         }
     }
 

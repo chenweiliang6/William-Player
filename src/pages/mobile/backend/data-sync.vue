@@ -3,19 +3,22 @@
     <wilQrcode ref="wilQrcodeRef" :logo="appLogo"></wilQrcode>
     <div class="scan-text">{{ t('backend.refreshSyncStatusEveryTenSeconds') }}</div>
     <div class="scan-tip">{{ t('backend.scanQrCodeSyncTip') }}</div>
-    <image src="@/static/scan-button.png" class="scan-button" @click="scanCode"  />
+    <wil-icon name="saomiaoerweima" custom-color="#ff6701" class="scan-button" @click="scanCode" />
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from "vue";
 import wilQrcode from "@/components/mobile/wil-qrcode/index.vue";
+import wilIcon from '@/components/common/wil-icon/index.vue';
 import appLogo from "@/static/app-logo1.png";
 import { setShareData, deleteShareData, getShareData } from "@/network/apis";
 import { onUnload } from "@dcloudio/uni-app";
 import * as CONFIG from '@/utils/config'
+import { writeMuluFromSync } from '@/utils/sources/mulu'
 import { useThemeNavbar } from '@/hooks/useThemeNavbar'
 import { useThemeClass } from '@/hooks/useThemeClass'
+import { initLibrary, initLibraryWithMigration, resetLibraryStore } from '@/utils/scrape'
 import { useI18nNavbar } from '@/hooks/useI18nNavbar'
 import { useI18n } from 'vue-i18n'
 
@@ -136,7 +139,18 @@ const refreshStatus = () => {
     await getShareData({ port: port.value.split(':')[1] })
       .then((res) => {
         if (res.data) {
-          uni.setStorageSync("localMovieTvData", res.data.localMovieTvData);
+          // 影视库已迁到新结构 movieTvLibrary。
+          // 对端若仍传旧的 localMovieTvData，先落到旧 key 再走一次迁移；
+          // 若已传新结构，直接写入新 key。
+          if (res.data.movieTvLibrary) {
+            uni.setStorageSync('movieTvLibrary', res.data.movieTvLibrary)
+            resetLibraryStore()
+            initLibrary().catch(() => {})
+          } else if (res.data.localMovieTvData) {
+            uni.setStorageSync('localMovieTvData', res.data.localMovieTvData)
+            resetLibraryStore()
+            initLibraryWithMigration({ type: 'WebDAV', accountName: '' }).catch(() => {})
+          }
           uni.setStorageSync("sourceList", res.data.sourceList);
           uni.setStorageSync("historyPlay", res.data.historyPlay);
           clearInterval(timer);
@@ -174,7 +188,8 @@ const startServer = () => {
       if (result?.code != 501) { //过滤掉发送完消息成功之后中止连接的501报错
         uni.setStorageSync('sourceList', result.sourceList)
         uni.setStorageSync('historyPlay', result.historyPlay)
-        uni.setStorageSync('muluData', result.muluData)
+        // 跨版本同步：对端可能还是旧的 tv/movie 两桶结构，先迁移成 entries
+        writeMuluFromSync(result.muluData)
         uni.setStorageSync('isreload', true)
         uni.switchTab({
           url: '/pages/mobile/video/index'
@@ -229,8 +244,7 @@ page {
   }
 
   .scan-button {
-    width: 100rpx;
-    height: 100rpx;
+    font-size: 100rpx;
     margin-top: 20rpx;
   }
 }

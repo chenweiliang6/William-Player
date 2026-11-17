@@ -10,6 +10,15 @@ import Folder from '@/static/folder.png'
 import webdavFileIcon from '@/static/webdav-fileIcon.png'
 import { getMainView, getEmbyList, getEmbyNewList } from '@/utils/emby'
 import { searchMovieTvByType } from '@/utils/tmdb'
+import {
+  scrapeSource,
+  getMovieTvData,
+  setMovieTvData,
+  initLibraryWithMigration,
+  isLibraryEmpty,
+  getAvailableSources,
+  hasLibraryContent,
+} from '@/utils/scrape'
 import { useI18n } from 'vue-i18n'
 import dayjs from 'dayjs'
 import emptyBg from '@/static/poster-empty.png'
@@ -28,6 +37,50 @@ export function useVideoIndex({ wil_modal }) {
   const refreshData = ref({ found: 0, toupdate: 0, updated: 0, success: 0, fail: 0 })
   const refreshLoading = ref(false)
   const scrollTop = ref(0)
+
+  // 刮削取消控制。signal 由编排/扫描/匹配三层共同检查（见 scrape/orchestrator.js:74、scan/tree.js:87、library/model.js:195），
+  // 这里只负责把它传下去并给出取消入口。
+  let activeSignal = null
+  // 与 refreshLoading 分开：取消后 refreshLoading 已置 false，不能再靠它防重入，
+  // 否则用户连点两次刷新会起两个并发的 scrapeSource 竞争写同一个 bucket。
+  const isScraping = ref(false)
+
+  // 把库重新投影到 UI 数据源。
+  // 刮削中每批都会调用，所以必须节流 —— projectLegacyView 是 O(n) 的
+  // 全量重建（建 Map + 三次 localeCompare 排序），大库时单次几毫秒。
+  const syncViewFromLibrary = () => {
+    const view = getMovieTvData()
+    localMovieTvData.value = view
+    setNavbarStyle(!hasLibraryContent(view))
+    libraryRevision.value++
+  }
+
+  let viewSyncTimer = null
+  let lastViewSyncAt = 0
+  const VIEW_SYNC_INTERVAL_MS = 400
+  const scheduleViewSync = () => {
+    if (viewSyncTimer) return
+    const wait = Math.max(0, VIEW_SYNC_INTERVAL_MS - (Date.now() - lastViewSyncAt))
+    viewSyncTimer = setTimeout(() => {
+      viewSyncTimer = null
+      lastViewSyncAt = Date.now()
+      syncViewFromLibrary()
+    }, wait)
+  }
+
+  const clearViewSync = () => {
+    if (viewSyncTimer) {
+      clearTimeout(viewSyncTimer)
+      viewSyncTimer = null
+    }
+  }
+
+  const cancelRefresh = (reason = 'user') => {
+    if (!activeSignal) return false
+    activeSignal.cancelled = true
+    activeSignal.reason = reason
+    return true
+  }
   const movieTvData = ref({
     //存储电影电视剧数据
     movie: [],
@@ -35,6 +88,10 @@ export function useVideoIndex({ wil_modal }) {
   })
 
   const localMovieTvData = ref({})
+  // 库内容的版本号。刮削期间库会分批增长，父组件每次投影后 +1；
+  // 子组件（hx-list / classify）靠它感知「需要重建列表了」，
+  // 因为它们的展示快照是从 props 复制出来的，不会自动跟随。
+  const libraryRevision = ref(0)
   const embyMovieTvList = ref([])
   const tmdbKey = ref('')
   const historyPlay = ref([])
@@ -142,6 +199,161 @@ export function useVideoIndex({ wil_modal }) {
   }
 
   //三网盘刮削的公共流程：重置统计 -> 登录(可选) -> 扫描目录 -> 比对 -> 刮削图片 -> 回写storage与埋点
+  // ── 新版刮削：走统一链路，按源分桶写入多源库 ──
+  // 与旧 refreshPosterWall 并存，逐步切换
+  const refreshSourceUnified = async ({ logTitle }) => {
+    // 重入守卫：上一轮还没结束就不再起新的。
+    // 用 isScraping 而不是 refreshLoading —— 取消会把后者置 false，守卫就失效了。
+    if (isScraping.value) {
+      uni.showToast({ title: t('video.syncingNow'), icon: 'none' })
+      return
+    }
+    refreshData.value = { found: 0, toupdate: 0, updated: 0, success: 0, fail: 0 }
+    scrollTop.value = 0
+    refreshLoading.value = true
+    isScraping.value = true
+
+    // 不设总时长上限：大库单次刮削可能跑很久，按时间掐断只会得到半截库。
+    // 结束方式只剩两种 —— 自然跑完，或用户点「取消」。
+    const signal = { cancelled: false, reason: '' }
+    activeSignal = signal
+
+    try {
+      // 确保库就绪；首次运行会尝试迁移旧库
+      await initLibraryWithMigration({
+        type: selectType.value.type,
+        accountName: selectMedia.value.name,
+      })
+
+      // 不再强制要求「电影目录 + 电视剧目录」两桶都配。
+      // 新结构用 entries（导入到媒体库的目录），旧结构两桶任一有值即可。
+      const muluData = uni.getStorageSync('muluData') || { movie: [], tv: [] }
+      const hasMediaFolder =
+        (muluData.entries || []).some(v => (v.target || 'media') === 'media') ||
+        muluData.movie?.length ||
+        muluData.tv?.length
+      if (!hasMediaFolder) {
+        uni.showToast({ title: t('media.pleaseSetMovieTvDirectory'), icon: 'none' })
+        return
+      }
+
+      const stats = await scrapeSource({
+        source: { type: selectType.value.type, name: selectMedia.value.name },
+        cred: selectMedia.value,
+        muluData,
+        signal,
+        onPhase: (phase, payload) => {
+          // 取消后不再刷数字，否则弹层里的计数会继续跳
+          if (signal.cancelled) return
+          if (phase === 'scan-progress') {
+            refreshData.value.found = payload.found || 0
+          } else if (phase === 'match-progress') {
+            refreshData.value.updated = payload.processed || 0
+            refreshData.value.toupdate = payload.total || 0
+          } else if (phase === 'partial') {
+            // 已有一批结果入库 → 刷新海报墙，让卡片就地增长。
+            // 进度数字由 match-progress 维护，这里不重复写，
+            // 否则「已更新/待更新」的含义会在「作品数」和「已处理组数」之间跳变。
+            scheduleViewSync()
+          }
+        },
+      })
+
+      // 取消/超时：编排层已把**已经刮到的批次**落库（取消语义 = 保留已刮到的）。
+      // 所以这里必须刷新一次数据源，让这些卡片显示出来；
+      // cancelReason 让弹层把标题显示成「已取消」还是「识别超时，已停止」。
+      if (signal.cancelled) {
+        clearViewSync()
+        syncViewFromLibrary()
+        refreshData.value.toupdate = refreshData.value.updated = 0
+        refreshData.value.cancelReason = signal.reason || 'user'
+        return
+      }
+
+      // 刮削结束（含 TMDB 故障保护撤回）：用最终库投影回旧形态喂给 UI。
+      // 先清掉挂起的节流刷新，避免它在 400ms 后又用同一份库覆盖一次。
+      clearViewSync()
+      const view = getMovieTvData()
+      localMovieTvData.value = view
+      libraryRevision.value++
+
+      // 统计要算上 byCategory 全部分区（含未识别），
+      // 只看 movie/tv 会把「全是未识别条目」的情况报成 0 部
+      const totalWorks = Object.values(view.byCategory || {})
+        .reduce((n, list) => n + (list?.length || 0), 0)
+      refreshData.value.updated = refreshData.value.toupdate = totalWorks
+      refreshData.value.success = totalWorks
+      // 进度弹层的「已失败」= 整根目录失败 + 被跳过的子树目录，
+      // 否则用户看不到「这轮有 N 个目录没刮成」。
+      refreshData.value.fail = (stats?.failed || 0) + (stats?.skipped || 0)
+      // 部分目录扫描失败要告诉用户，否则会被当成「刮漏」
+      refreshData.value.partialFailures = stats?.partialFailures || []
+      setNavbarStyle(!hasLibraryContent(view))
+
+      // 本次清掉了网盘上已不存在的影片 → 必须告知，静默删片比留幽灵条目更困惑。
+      // 注意：这些条目的播放历史也会被 syncHistoryPlay 一并过滤（片没了历史没意义）。
+      if (stats?.removed > 0) {
+        uni.showToast({
+          title: t('video.removedMissingVideos', {
+            count: stats.removed,
+            default: `已移除 ${stats.removed} 部网盘上已不存在的影片`,
+          }),
+          icon: 'none',
+          duration: 3000,
+        })
+      }
+
+      if (stats?.partialFailures?.length) {
+        const pf = stats.partialFailures[0]
+        // 跳过（挂载失效）与扫描失败是两种问题，提示要能指导下一步：
+        //   跳过 → 去检查 Alist 存储/重新登录该挂载
+        //   失败 → 检查网络或网盘登录
+        const title = pf.reason === 'skipped'
+          ? t('video.partialScanSkipped', {
+            count: pf.skipped,
+            default: `${pf.skipped} 个目录无法访问，已跳过（挂载可能已失效）`,
+          })
+          : t('video.partialScanFailed', {
+            failed: pf.failed,
+            total: pf.total,
+            default: `${pf.failed}/${pf.total} 个目录扫描失败，部分影片可能未显示`,
+          })
+        uni.showToast({ title, icon: 'none', duration: 3000 })
+      }
+
+      // 一个条目都没扫到：区分「目录确实是空的」和「请求失败/全部被跳过」，
+      // 后者以前会被静默吞掉，表现为「刮削完成但海报墙还是空的」
+      if (!view.movie.length && !view.tv.length && (stats?.failed || stats?.skipped)) {
+        uni.showToast({ title: t('source.scanFailedCheckLogin'), icon: 'none' })
+      }
+    } catch (e) {
+      console.error('[useVideoIndex] 统一刮削失败:', e)
+      // 区分三类失败，各给一条能指导下一步的提示
+      let title
+      if (e?.isAuthError) title = t('source.loginExpiredRelogin')
+      else if (e?.isConnectError) title = t('source.connectFailed')
+      else title = e?.message || t('video.invalidApiKey')
+      uni.showToast({ title, icon: 'none' })
+    } finally {
+      clearViewSync()
+      const wasCancelled = signal.cancelled
+      const cancelReason = signal.reason
+      activeSignal = null
+      isScraping.value = false
+      scrollTop.value = 0
+      refreshLoading.value = false
+      if (wasCancelled) {
+        // 取消语义是「保留已刮到的」，文案要说清楚，否则用户会以为白刮了
+        const title = cancelReason === 'tmdb'
+          ? t('video.tmdbUnavailable')
+          : t('video.scanCancelledKeepPartial', { default: '已取消，已保留识别到的影片' })
+        uni.showToast({ title, icon: 'none' })
+      } else if (logTitle) {
+        addOperLog({ title: logTitle, businessType: 11, operatorType: 2 })
+      }
+    }
+  }
+
   const refreshPosterWall = async ({ prepare, scan, logTitle }) => {
     refreshData.value = { found: 0, toupdate: 0, updated: 0, success: 0, fail: 0 }
     movieTvData.value = { movie: [], tv: [] }
@@ -190,8 +402,9 @@ export function useVideoIndex({ wil_modal }) {
     refreshData.value.updated = refreshData.value.toupdate
     refreshData.value.toupdate = 0
     refreshData.value.success = localMovieTvData.value.movie.length + localMovieTvData.value.tv.length
-    setNavbarStyle(!localMovieTvData.value?.movie?.length && !localMovieTvData.value?.tv?.length)
-    uni.setStorageSync('localMovieTvData', localMovieTvData.value)
+    setNavbarStyle(!hasLibraryContent(localMovieTvData.value))
+    // 旧链路已停用（refreshVideo 走 refreshSourceUnified），这里不再写旧 key，
+    // 避免与新库 movieTvLibrary 产生两份互相矛盾的数据。
     scrollTop.value = 0
     refreshLoading.value = false
     addOperLog({ title: logTitle, businessType: 11, operatorType: 2 })
@@ -296,11 +509,11 @@ export function useVideoIndex({ wil_modal }) {
           const season = extractSeasonNumber(item.name)
           //刮削的时候查询这个影片名是不是在本地已经有了，本地有了的话，就不用去tmdb查了
           let exitMovieTv = null
-          let localMovieTvData = uni.getStorageSync('localMovieTvData') || {}
+          let cachedData = getMovieTvData()
           if (type == 'movie') {
-            exitMovieTv = localMovieTvData.movie?.find(i => i.path == item.path) || null
+            exitMovieTv = cachedData.movie?.find(i => i.path == item.path) || null
           } else if (type == 'tv') {
-            exitMovieTv = localMovieTvData.tv?.find(i => i.path == item.path) || null
+            exitMovieTv = cachedData.tv?.find(i => i.path == item.path) || null
           }
           let res = {}
           let data = {}
@@ -391,7 +604,12 @@ export function useVideoIndex({ wil_modal }) {
     })
 
   //根据设定好的文件路径进行查找天翼云盘的文件
-  const get189MovieTv = async () => {
+  /**
+   * 通用扫描器：五个网盘来源的结构完全一致，
+   * 差异只有「取列表的方式」和「provider 名」，交给注册表处理。
+   * 入参用 fetchFolder(ref) 而不是来源 type，便于夸克在首屏额外传 listData。
+   */
+  const scanSourceFolder = async ({ fetchFolder, provider }) => {
     let muluData = uni.getStorageSync('muluData') || {}
     let movieMulu = muluData.movie?.filter(v => v.name == selectMedia.value.name)
     let tvMulu = muluData.tv?.filter(v => v.name == selectMedia.value.name)
@@ -408,18 +626,18 @@ export function useVideoIndex({ wil_modal }) {
     if (movieMulu?.length) {
       await Promise.allSettled(
         movieMulu.map(async h => {
-          let movieResult = await get189Folder({ folderId: h.folderFileId }, selectMedia.value)
-          let movieArr = movieResult.fileListAO.fileList.filter(v => {
+          let movieResult = await fetchFolder(h)
+          let movieArr = (movieResult.fileList || []).filter(v => {
             v.path = h.path + '/' + v.name
-            v.provider = '189CloudPC'
+            v.provider = provider
             return VIDEO_FORMAT.some(i => v.name.includes(i))
           })
           refreshData.value.found += movieArr.length
           movieTvData.value.movie.push(...movieArr)
           await Promise.allSettled(
-            movieResult.fileListAO.folderList.map(async v => {
+            (movieResult.folderList || []).map(async v => {
               v.path = h.path + '/' + v.name
-              v.provider = '189CloudPC'
+              v.provider = provider
               await recursionMovie(v, movieTvData.value.movie, selectType.value, selectMedia.value, refreshData.value)
             })
           )
@@ -434,95 +652,12 @@ export function useVideoIndex({ wil_modal }) {
     if (tvMulu?.length) {
       await Promise.allSettled(
         tvMulu.map(async h => {
-          let tvResult = await get189Folder({ folderId: h.folderFileId }, selectMedia.value)
-          if (!tvResult.fileListAO.folderList) tvResult.fileListAO.folderList = []
+          let tvResult = await fetchFolder(h)
+          if (!tvResult.folderList) tvResult.folderList = []
           await Promise.allSettled(
-            tvResult.fileListAO.folderList.map(async v => {
+            tvResult.folderList.map(async v => {
               v.path = h.path + '/' + v.name
-              v.provider = '189CloudPC'
-              await recursionTv(v, {}, movieTvData.value.tv, selectType.value, selectMedia.value, refreshData.value)
-            })
-          )
-        })
-      )
-    } else {
-      uni.showToast({
-        title: t('source.pleaseSetTvDirectory'),
-        icon: 'none',
-      })
-    }
-  }
-  //夸克网盘refresh
-  const refreshQuarkVideo = () =>
-    refreshPosterWall({
-      scan: () => getQuarkMovieTv(listData.value[0]),
-      logTitle: t('video.quarkPosterWallGenerated'),
-    })
-
-  //联通云盘refresh
-  const refreshWopanVideo = () =>
-    refreshPosterWall({
-      scan: getWopanMovieTv,
-      logTitle: t('video.wopanPosterWallGenerated'),
-    })
-
-  //移动云盘refresh
-  const refresh139Video = () =>
-    refreshPosterWall({
-      scan: get139MovieTv,
-      logTitle: t('video.cloud139PosterWallGenerated'),
-    })
-
-  //根据设定好的文件路径查找联通云盘的文件（结构对齐 get189MovieTv）
-  const getWopanMovieTv = async () => {
-    let muluData = uni.getStorageSync('muluData') || {}
-    let movieMulu = muluData.movie?.filter(v => v.name == selectMedia.value.name)
-    let tvMulu = muluData.tv?.filter(v => v.name == selectMedia.value.name)
-    if (!movieMulu?.length && !tvMulu?.length) {
-      uni.showToast({
-        title: t('media.pleaseSetMovieTvDirectory'),
-        icon: 'none',
-      })
-      return
-    }
-    scrollTop.value = 0
-    refreshLoading.value = true
-
-    if (movieMulu?.length) {
-      await Promise.allSettled(
-        movieMulu.map(async h => {
-          let movieResult = await getWopanFolder({ folderId: h.folderFileId }, selectMedia.value)
-          let movieArr = movieResult.fileListAO.fileList.filter(v => {
-            v.path = h.path + '/' + v.name
-            v.provider = 'WoPan'
-            return VIDEO_FORMAT.some(i => v.name.includes(i))
-          })
-          refreshData.value.found += movieArr.length
-          movieTvData.value.movie.push(...movieArr)
-          await Promise.allSettled(
-            movieResult.fileListAO.folderList.map(async v => {
-              v.path = h.path + '/' + v.name
-              v.provider = 'WoPan'
-              await recursionMovie(v, movieTvData.value.movie, selectType.value, selectMedia.value, refreshData.value)
-            })
-          )
-        })
-      )
-    } else {
-      uni.showToast({
-        title: t('source.pleaseSetMovieDirectory'),
-        icon: 'none',
-      })
-    }
-    if (tvMulu?.length) {
-      await Promise.allSettled(
-        tvMulu.map(async h => {
-          let tvResult = await getWopanFolder({ folderId: h.folderFileId }, selectMedia.value)
-          if (!tvResult.fileListAO.folderList) tvResult.fileListAO.folderList = []
-          await Promise.allSettled(
-            tvResult.fileListAO.folderList.map(async v => {
-              v.path = h.path + '/' + v.name
-              v.provider = 'WoPan'
+              v.provider = provider
               await recursionTv(v, {}, movieTvData.value.tv, selectType.value, selectMedia.value, refreshData.value)
             })
           )
@@ -536,203 +671,107 @@ export function useVideoIndex({ wil_modal }) {
     }
   }
 
-  //根据设定好的文件路径查找移动云盘的文件（结构对齐 getWopanMovieTv）
-  const get139MovieTv = async () => {
-    let muluData = uni.getStorageSync('muluData') || {}
-    let movieMulu = muluData.movie?.filter(v => v.name == selectMedia.value.name)
-    let tvMulu = muluData.tv?.filter(v => v.name == selectMedia.value.name)
-    if (!movieMulu?.length && !tvMulu?.length) {
-      uni.showToast({
-        title: t('media.pleaseSetMovieTvDirectory'),
-        icon: 'none',
-      })
-      return
-    }
-    scrollTop.value = 0
-    refreshLoading.value = true
+  //天翼 / 联通 / 移动 / 夸克：结构完全一致，只剩取列表方式不同
+  const get189MovieTv = () =>
+    scanSourceFolder({
+      fetchFolder: h => get189Folder({ folderId: h.folderFileId }, selectMedia.value),
+      provider: '189CloudPC',
+    })
 
-    if (movieMulu?.length) {
-      await Promise.allSettled(
-        movieMulu.map(async h => {
-          let movieResult = await get139Folder({ folderId: h.folderFileId }, selectMedia.value)
-          let movieArr = movieResult.fileListAO.fileList.filter(v => {
-            v.path = h.path + '/' + v.name
-            v.provider = 'Cloud139'
-            return VIDEO_FORMAT.some(i => v.name.includes(i))
-          })
-          refreshData.value.found += movieArr.length
-          movieTvData.value.movie.push(...movieArr)
-          await Promise.allSettled(
-            movieResult.fileListAO.folderList.map(async v => {
-              v.path = h.path + '/' + v.name
-              v.provider = 'Cloud139'
-              await recursionMovie(v, movieTvData.value.movie, selectType.value, selectMedia.value, refreshData.value)
-            })
-          )
-        })
-      )
-    } else {
-      uni.showToast({
-        title: t('source.pleaseSetMovieDirectory'),
-        icon: 'none',
-      })
-    }
-    if (tvMulu?.length) {
-      await Promise.allSettled(
-        tvMulu.map(async h => {
-          let tvResult = await get139Folder({ folderId: h.folderFileId }, selectMedia.value)
-          if (!tvResult.fileListAO.folderList) tvResult.fileListAO.folderList = []
-          await Promise.allSettled(
-            tvResult.fileListAO.folderList.map(async v => {
-              v.path = h.path + '/' + v.name
-              v.provider = 'Cloud139'
-              await recursionTv(v, {}, movieTvData.value.tv, selectType.value, selectMedia.value, refreshData.value)
-            })
-          )
-        })
-      )
-    } else {
-      uni.showToast({
-        title: t('source.pleaseSetTvDirectory'),
-        icon: 'none',
-      })
-    }
-  }
+  const getWopanMovieTv = () =>
+    scanSourceFolder({
+      fetchFolder: h => getWopanFolder({ folderId: h.folderFileId }, selectMedia.value),
+      provider: 'WoPan',
+    })
 
-  //查找天翼云盘中的名叫电影,电视剧的文件夹，按照此路径简单查询/我的视频/电影，/我的视频/电视剧，避免扫库有风险
-  const getQuarkMovieTv = async () => {
-    let muluData = uni.getStorageSync('muluData') || {}
-    let movieMulu = muluData.movie?.filter(v => v.name == selectMedia.value.name)
-    let tvMulu = muluData.tv?.filter(v => v.name == selectMedia.value.name)
-    if (!movieMulu?.length && !tvMulu?.length) {
-      uni.showToast({
-        title: t('media.pleaseSetMovieTvDirectory'),
-        icon: 'none',
-      })
-      return
-    }
-    scrollTop.value = 0
-    refreshLoading.value = true
+  const get139MovieTv = () =>
+    scanSourceFolder({
+      fetchFolder: h => get139Folder({ folderId: h.folderFileId }, selectMedia.value),
+      provider: 'Cloud139',
+    })
 
-    if (movieMulu?.length) {
-      await Promise.allSettled(
-        movieMulu.map(async h => {
-          let movieResult = await getQuarkFolder({ fid: h.folderFileId }, selectMedia.value)
-          await Promise.allSettled(
-            movieResult.data.list.map(async v => {
-              v.id = v.fid
-              v.name = v.file_name
-              v.path = h.path + '/' + v.file_name
-              v.provider = 'Quark'
-              if (v.file_type == '0') {
-                await recursionMovie(v, movieTvData.value.movie, selectType.value, selectMedia.value, refreshData.value)
-              } else {
-                if (VIDEO_FORMAT.some(i => v.name.includes(i))) {
-                  movieTvData.value.movie.push(v)
-                  refreshData.value.found++
-                }
-              }
-            })
-          )
-        })
-      )
-    } else {
-      uni.showToast({
-        title: t('source.pleaseSetMovieDirectory'),
-        icon: 'none',
-      })
-    }
-    if (tvMulu?.length) {
-      await Promise.allSettled(
-        tvMulu.map(async h => {
-          let tvResult = await getQuarkFolder({ fid: h.folderFileId }, selectMedia.value)
-          if (!tvResult.data.list) tvResult.data.list = []
-          tvResult.data.list = tvResult.data.list.map(v => {
-            return { id: v.fid, name: v.file_name, path: h.path + '/' + v.file_name, provider: 'Quark', size: v.size, file_type: v.file_type }
-          })
-          await Promise.allSettled(
-            tvResult.data.list.map(async v => {
-              if (v.file_type == '0') {
-                await recursionTv(v, {}, movieTvData.value.tv, selectType.value, selectMedia.value, refreshData.value)
-              }
-            })
-          )
-        })
-      )
-    } else {
-      uni.showToast({
-        title: t('source.pleaseSetTvDirectory'),
-        icon: 'none',
-      })
-    }
-  }
+  const getQuarkMovieTv = () =>
+    scanSourceFolder({
+      fetchFolder: h => getQuarkFolder({ fid: h.folderFileId }, selectMedia.value),
+      provider: 'Quark',
+    })
 
   //Emby的refresh
   const refreshEmby = async () => {
     const CollectionTypeArr = ['movies', 'tvshows', 'music', 'games', 'books', 'musicvideos', 'homevideos', 'livetv', 'channels']
     scrollTop.value = 0
     refreshLoading.value = true
-    let res1 = await getMainView(selectMedia.value)
-    const imgApiKey = selectMedia.value.token ? `&api_key=${selectMedia.value.token}` : ''
-    embyMovieTvList.value = res1.Items.map(v => {
-      return {
-        name: v.Name,
-        collectionType: v.CollectionType,
-        poster: v?.ImageTags?.Primary
-          ? `${selectMedia.value.protocol}://${selectMedia.value.address}:${selectMedia.value.port}/emby/Items/${v.Id}/Images/Primary?tag=${v.ImageTags.Primary}${imgApiKey}`
-          : emptyBg,
-        id: v.Id,
-        list: [],
-      }
-    })
-    let embyObj = {
-      EnableImageTypes: 'Primary,Backdrop,Thumb',
-      Fields: 'BasicSyncInfo,CanDelete,Container,PrimaryImageAspectRatio,ProductionYear,Status,EndDate,Prefix',
-      MediaTypes: 'Video',
-      Limit: '20',
-      Recursive: true,
-      ImageTypeLimit: '1',
-    }
-    await Promise.all(
-      embyMovieTvList.value.map(async v => {
-        if (CollectionTypeArr.includes(v.collectionType)) {
-          embyObj.ParentId = v.id
-          let res2 = await getEmbyNewList(embyObj, selectMedia.value)
-          let arr = res2.map(i => {
-            return {
-              id: i.Id,
-              name: i.Name,
-              provider: 'Emby',
-              releaseTime: dayjs(i.EndDate).format('YYYY-MM-DD'),
-              poster: i.ImageTags.Primary
-                ? `${selectMedia.value.protocol}://${selectMedia.value.address}:${selectMedia.value.port}/emby/Items/${i.Id}/Images/Primary?tag=${i.ImageTags.Primary}${imgApiKey}`
-                : emptyBg,
-              type: i.Type,
-            }
-          })
-          v.list = arr
+    try {
+      let res1 = await getMainView(selectMedia.value)
+      const imgApiKey = selectMedia.value.token ? `&api_key=${selectMedia.value.token}` : ''
+      embyMovieTvList.value = res1.Items.map(v => {
+        return {
+          name: v.Name,
+          collectionType: v.CollectionType,
+          poster: v?.ImageTags?.Primary
+            ? `${selectMedia.value.protocol}://${selectMedia.value.address}:${selectMedia.value.port}/emby/Items/${v.Id}/Images/Primary?tag=${v.ImageTags.Primary}${imgApiKey}`
+            : emptyBg,
+          id: v.Id,
+          list: [],
         }
       })
-    )
-    scrollTop.value = 0
-    refreshLoading.value = false
-    setNavbarStyle(embyMovieTvList.value?.length)
-    uni.setStorageSync('embyMovieTvList', embyMovieTvList.value)
+      let embyObj = {
+        EnableImageTypes: 'Primary,Backdrop,Thumb',
+        Fields: 'BasicSyncInfo,CanDelete,Container,PrimaryImageAspectRatio,ProductionYear,Status,EndDate,Prefix',
+        MediaTypes: 'Video',
+        Limit: '20',
+        Recursive: true,
+        ImageTypeLimit: '1',
+      }
+      await Promise.all(
+        embyMovieTvList.value.map(async v => {
+          if (CollectionTypeArr.includes(v.collectionType)) {
+            embyObj.ParentId = v.id
+            let res2 = await getEmbyNewList(embyObj, selectMedia.value)
+            let arr = res2.map(i => {
+              return {
+                id: i.Id,
+                name: i.Name,
+                provider: 'Emby',
+                releaseTime: dayjs(i.EndDate).format('YYYY-MM-DD'),
+                poster: i.ImageTags.Primary
+                  ? `${selectMedia.value.protocol}://${selectMedia.value.address}:${selectMedia.value.port}/emby/Items/${i.Id}/Images/Primary?tag=${i.ImageTags.Primary}${imgApiKey}`
+                  : emptyBg,
+                type: i.Type,
+              }
+            })
+            v.list = arr
+          }
+        })
+      )
+      setNavbarStyle(embyMovieTvList.value?.length)
+      uni.setStorageSync('embyMovieTvList', embyMovieTvList.value)
+    } catch (e) {
+      console.error('[useVideoIndex] Emby 刷新失败:', e)
+      let title
+      if (e?.isAuthError) title = t('source.loginExpiredRelogin')
+      else if (e?.isConnectError) title = t('source.connectFailed')
+      else title = e?.message || t('source.connectFailed')
+      uni.showToast({ title, icon: 'none' })
+    } finally {
+      // 原先只在成功路径末尾置 false，任一 await 抛错都会让骨架屏永久转圈
+      scrollTop.value = 0
+      refreshLoading.value = false
+    }
   }
 
   const refreshVideo = async () => {
-    if (selectType.value.type == 'WebDAV') {
-      await refreshWebDavVideo()
-    } else if (selectType.value.type == '天翼云盘') {
-      await refresh189Video()
-    } else if (selectType.value.type == '夸克网盘') {
-      await refreshQuarkVideo()
-    } else if (selectType.value.type == '联通云盘') {
-      await refreshWopanVideo()
-    } else if (selectType.value.type == '移动云盘') {
-      await refresh139Video()
-    } else if (selectType.value.type == 'Emby') {
+    if (selectType.value.type == 'Emby') {
+      // Emby 是服务端媒体库，一次性 Recursive 拉取，不参与本地刮削
       await refreshEmby()
+    } else {
+      // 五个网盘来源统一走新链路。
+      // 旧代码在这里调用了已删除的 refreshQuarkVideo/refreshWopanVideo/refresh139Video，
+      // 会抛 ReferenceError，现已一并修复。
+      // WebDAV 需要先重新登录换 token，交给 prepare 处理。
+      await refreshSourceUnified({
+        logTitle: t('video.posterWallGenerated', { source: selectType.value.type }) || '刮削完成',
+      })
     }
     syncHistoryPlay()
   }
@@ -764,6 +803,20 @@ export function useVideoIndex({ wil_modal }) {
   }
   //判断选择的是webdav还是天翼云盘还是夸克
   const { judgeSelect } = useSourceSelect({ selectType, selectMedia, sourceListRef: sourceList })
+
+  //把历史上写成字符串 '1'/'0' 的 active 归一为布尔，避免 '0' 被判为真值
+  const normalizeActiveFlag = list => {
+    let changed = false
+    list.forEach(group => {
+      (group.list || []).forEach(item => {
+        if (item.active === '1' || item.active === '0') {
+          item.active = item.active === '1'
+          changed = true
+        }
+      })
+    })
+    return changed
+  }
 
   const initSourceList = () => {
     sourceList.value = uni.getStorageSync('sourceList')
@@ -806,6 +859,10 @@ export function useVideoIndex({ wil_modal }) {
       })
       uni.setStorageSync('sourceList', sourceList.value)
     }
+    //老数据迁移：'1'/'0' → true/false
+    if (normalizeActiveFlag(sourceList.value)) {
+      uni.setStorageSync('sourceList', sourceList.value)
+    }
   }
 
   //页面显示执行的方法
@@ -816,15 +873,15 @@ export function useVideoIndex({ wil_modal }) {
     if (showRecommend !== settingData.value.showRecommend) {
       //如果设置改变
       embyMovieTvList.value = uni.getStorageSync('embyMovieTvList')
-      let isEmpty = selectType.value.type === 'Emby' ? embyMovieTvList.value?.length : !localMovieTvData.value?.movie?.length && !localMovieTvData.value?.tv?.length
+      let isEmpty = selectType.value.type === 'Emby' ? embyMovieTvList.value?.length : !hasLibraryContent(localMovieTvData.value)
       if (!settingData.value.showRecommend) {
         setNavbarStyle(isEmpty)
       }
     }
     initSourceList()
     judgeSelect()
-    localMovieTvData.value = uni.getStorageSync('localMovieTvData') || {}
-    if (!localMovieTvData.value?.tv?.length && !localMovieTvData.value?.movie?.length) scrollTop.value = 0
+    localMovieTvData.value = getMovieTvData()
+    if (!hasLibraryContent(localMovieTvData.value)) scrollTop.value = 0
     tmdbKey.value = uni.getStorageSync('settingData').tmdbKey || ''
     if (uni.getStorageSync('secondPage') == 'videoPlayer') {
       if (historySyncTimer) {
@@ -900,8 +957,8 @@ export function useVideoIndex({ wil_modal }) {
     // setTmdbImgDomain();
     initSourceList()
     judgeSelect()
-    localMovieTvData.value = uni.getStorageSync('localMovieTvData') || {}
-    setNavbarStyle(!localMovieTvData.value?.movie?.length && !localMovieTvData.value?.tv?.length)
+    localMovieTvData.value = getMovieTvData()
+    setNavbarStyle(!hasLibraryContent(localMovieTvData.value))
     historyPlay.value = uni.getStorageSync('historyPlay') || []
     historyPlay.value = historyPlay.value.filter(v => v.sourceType == selectType.value.type && v.sourceName == selectMedia.value.name)
     historyPlay.value = historyPlay.value.filter(item => {
@@ -921,16 +978,23 @@ export function useVideoIndex({ wil_modal }) {
     uni.setStorageSync('historyPlay', [...historyArr, ...historyPlay.value])
     if (selectType.value.type == 'WebDAV') {
       if (selectMedia.value.name) {
-        let res1 = await loginUser(selectMedia.value)
-        selectMedia.value.token = res1.data.token
-        uni.setStorageSync('sourceList', sourceList.value)
-        let res = await getFolder({}, selectMedia.value)
-        listData.value = res.data.content.map(item => {
-          if (item.type == '1') {
-            item.leftIcon = Folder
-          }
-          return item
-        })
+        // alist 不可达/登录失败在这里抛错；不影响历史同步，降级成空列表即可
+        try {
+          let res1 = await loginUser(selectMedia.value)
+          if (!res1?.data?.token) throw new Error('登录失败')
+          selectMedia.value.token = res1.data.token
+          uni.setStorageSync('sourceList', sourceList.value)
+          let res = await getFolder({}, selectMedia.value)
+          listData.value = res.data.content.map(item => {
+            if (item.type == '1') {
+              item.leftIcon = Folder
+            }
+            return item
+          })
+        } catch (e) {
+          console.warn('[useVideoIndex] 读取 WebDAV 根目录失败:', e?.message)
+          listData.value = []
+        }
       }
     } else if (selectType.value.type == '天翼云盘') {
       if (selectMedia.value.name) {
@@ -962,11 +1026,19 @@ export function useVideoIndex({ wil_modal }) {
       clearTimeout(historySyncTimer)
       historySyncTimer = null
     }
+    // 页面卸载后节流定时器不该继续跑（它还会写 localMovieTvData）
+    clearViewSync()
+    // 刮削本身不因离页而停止 —— 它已经在后台写库了，中途放弃反而会留下半截。
+    // 这里只断开 UI 与它的联系；本轮会在后台跑到自然结束，
+    // 或者由用户重新进入页面后点「取消」结束。
   })
   return {
     video_navbar,
     refreshData,
     refreshLoading,
+    isScraping,
+    cancelRefresh,
+    libraryRevision,
     movieTvData,
     localMovieTvData,
     embyMovieTvList,

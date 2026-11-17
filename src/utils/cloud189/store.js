@@ -1,5 +1,6 @@
 // 天翼云盘凭据存储：token 落库（sourceList）+ 账密独立存储（cloud189Credentials，不进同步路径）
 import { addOperLog } from '@/network/apis'
+import { renameAccount } from '@/utils/sources/mulu'
 
 const CREDENTIAL_KEY = 'cloud189Credentials'
 // 注：账号密码明文存储于 uni storage（与现有 Cookie 明文存储风险等级相同）；
@@ -55,16 +56,7 @@ export const persist189Token = (tokenInfo, { isActive } = {}) => {
       let historyArr = uni.getStorageSync('historyPlay') || []
       historyArr = historyArr.filter(v => v.sourceType != '天翼云盘' || v.sourceName != oldName)
       uni.setStorageSync('historyPlay', historyArr)
-      const muluData = uni.getStorageSync('muluData')
-      if (muluData) {
-        muluData.movie?.forEach(v => {
-          if (v.name == oldName) v.name = loginName
-        })
-        muluData.tv?.forEach(v => {
-          if (v.name == oldName) v.name = loginName
-        })
-        uni.setStorageSync('muluData', muluData)
-      }
+      renameAccount('天翼云盘', oldName, loginName)
     }
     // 清除旧 Cookie 字段，写入 token 字段
     delete cloud189.list[0].JSESSIONID

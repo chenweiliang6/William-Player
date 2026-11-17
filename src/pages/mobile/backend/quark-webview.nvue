@@ -9,6 +9,8 @@
 import NvueNavbar from '@/components/mobile/wil-navbar/navbar.nvue'
 import { getQuarkFolder, getQuarkUser } from '@/utils/common'
 import { addOperLog } from '@/network/apis'
+import { renameAccount } from '@/utils/sources/mulu'
+import { openFolderPicker, FOLDER_PICKER_PATH } from '@/utils/sources/picker'
 
 export default {
   components: {
@@ -30,16 +32,8 @@ export default {
   },
   methods: {
     editMulu(newName) {
-      const muluData = uni.getStorageSync('muluData')
-      let muluMovie = muluData.movie?.find(v => v.name == this.oldName)
-      let muluTv = muluData.tv?.find(v => v.name == this.oldName)
-      if (muluMovie) {
-        muluMovie.name = newName
-      }
-      if (muluTv) {
-        muluTv.name = newName
-      }
-      uni.setStorageSync('muluData', muluData)
+      // 账号昵称变化时同步改名目录配置（entries 与旧桶一并处理）
+      renameAccount('夸克网盘', this.oldName, newName)
     },
     getCookies(event) {
       this.quarkCookie = event.detail.cookies
@@ -84,26 +78,21 @@ export default {
             title: '修改成功',
             icon: 'none',
           })
-          const pages = getCurrentPages()
-          // 上一级页面实例（pages[pages.length - 2]）
-          const prevPage = pages[pages.length - 2]
-          // 直接获取上一级页面的数据或调用方法
-          if (prevPage.route == 'pages/mobile/source/source-list') {
-            if (this.routerParams.isActive == '1') {
-              uni.setStorageSync('isreload', true)
-            } else if (this.routerParams.isActive == '0') {
-              this.clearTimer()
-              setTimeout(() => {
-                uni.navigateBack({
-                  delta: 1,
-                })
-                uni.redirectTo({
-                  url: '/pages/mobile/media/catelog-setting',
-                })
-              }, 1500)
-              return
-            }
+          // 修改同样进目录树：回填已导入目录，允许增删
+          if (this.routerParams.isActive == '1') {
+            uni.setStorageSync('isreload', true)
           }
+          this.clearTimer()
+          setTimeout(() => {
+            openFolderPicker({
+              type: '夸克网盘',
+              name: res1.data.nickname,
+              mode: 'edit',
+              // 回退层数由 openFolderPicker 按页面栈推导，这里只需要区分端
+              path: this.platform === 'TV' ? FOLDER_PICKER_PATH.tv : undefined,
+            })
+          }, 1500)
+          return
         } else {
           let obj = {
             name: res1.data.nickname,
@@ -122,19 +111,19 @@ export default {
             title: '添加成功',
             icon: 'none',
           })
+          this.clearTimer()
           setTimeout(() => {
-            uni.navigateTo({
-              url: '/pages/mobile/media/catelog-setting',
+            // 新增账号后直接进导入页，勾选要扫描的目录
+            openFolderPicker({
+              type: '夸克网盘',
+              name: obj.name,
+              mode: 'add',
+              path: this.platform === 'TV' ? FOLDER_PICKER_PATH.tv : undefined,
             })
           }, 1800)
           addOperLog({ title: '登录夸克网盘', businessType: 12, operatorType: 2, operUrl: '' })
+          return
         }
-        this.clearTimer()
-        setTimeout(() => {
-          uni.navigateBack({
-            delta: 2,
-          })
-        }, 1500)
       } else {
         uni.showToast({
           title: '权限校验失败，请稍后',

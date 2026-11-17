@@ -16,17 +16,18 @@
           <div
             :class="['video-navbar-popover__arrow', showPopover ? 'show-animation' : 'hide-animation']"
             :style="{ top: Number(navBarHeight.split('px')[0]) - 12 + 'px' }"
-            v-show="showPopover">
-            <image src="@/static/rect-san.png" style="width: 100%; height: 100%"  />
+            v-show="showPopover"
+          >
+            <wil-icon name="daosanjiao1" custom-color="var(--app-bg-card)" size="16px" class="video-navbar-popover__arrow-icon" />
           </div>
-          <div :class="['video-navbar-popover__container', showPopover ? 'show-animation' : 'hide-animation']" :style="{ top: navBarHeight }" v-if="showPopover">
+          <div :class="['video-navbar-popover__container', showPopover ? 'show-animation' : 'hide-animation']" :style="{ top: navBarHeight, right: popoverRight }" v-if="showPopover">
             <div class="popover-title">
               <div class="popover-title-left">
                 <span>{{ popoverData.title }}</span>
-                <span class="popover-title-left__button" v-if="popoverData.title == t('video.scanning') && showPause" @click="toCancel">{{ t('video.pause') }}</span>
+                <span class="popover-title-left__button" v-if="loading" @click="toCancel">{{ t('video.cancelScan') }}</span>
               </div>
               <div class="popover-title-right" @click="closePopover">
-                <nut-icon name="close" custom-color="#fff" size="12"></nut-icon>
+                <nut-icon name="close" custom-color="var(--app-text-tertiary)" size="12"></nut-icon>
               </div>
             </div>
             <div class="popover-list" v-if="initTmdbKey">
@@ -48,9 +49,11 @@
 </template>
 
 <script setup>
-import { onMounted, ref, watch, watchEffect, nextTick } from 'vue'
+import { onMounted, ref, watch, watchEffect, nextTick, computed } from 'vue'
 import { setTmdbKey } from '@/network/apis'
 import { useI18n } from 'vue-i18n'
+import { findActiveSource } from '@/utils/tools'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 
 const { t } = useI18n()
 const props = defineProps({
@@ -68,6 +71,8 @@ const video_navbar = ref(null)
 
 const showPopover = ref(false)
 const popoverPosition = ref({})
+// 弹层右边缘对齐刷新图标中心；量不到时退回原来的固定值，避免弹层贴边或跑出屏幕
+const popoverRight = computed(() => (popoverPosition.value.right != null ? `${popoverPosition.value.right}px` : '7.5px'))
 const getProgressList = (failed = false) => [
   { key: 'found', label: t('video.found'), value: 0 },
   { key: failed ? 'failed' : 'pendingUpdate', label: failed ? t('video.failed') : t('video.pendingUpdate'), value: 0 },
@@ -159,7 +164,8 @@ const toAddMedia = () => {
     })
     return
   }
-  uni.navigateTo({
+  // 资源库已是 tabBar 页，必须用 switchTab
+  uni.switchTab({
     url: '/pages/mobile/source/source-list',
   })
   // let webdavInfo = uni.getStorageSync('webdavInfo')
@@ -178,7 +184,7 @@ const toAddMedia = () => {
 const judgeSelect = () => {
   let sourceList = uni.getStorageSync('sourceList')
   selectType.value = sourceList.find(item => {
-    let select = item.list.find(i => i.active)
+    let select = findActiveSource(item.list)
     if (select) {
       selectMedia.value = select
       return true
@@ -196,35 +202,34 @@ const showProgress = () => {
     })
     return
   }
-  if (!uni.getStorageSync('settingData').tmdbKey) {
-    popoverData.value.title = 'api_key'
+  // 刮削进行中：直接展开弹层，取消按钮此时一定可见
+  if (loading.value) {
     showPopover.value = true
     return
   }
-  if (loading.value) {
+  if (!uni.getStorageSync('settingData').tmdbKey) {
+    popoverData.value.title = t('video.inputTmdbApiKey')
     showPopover.value = true
+    return
+  }
+  judgeSelect()
+  // 没有启用的源时 selectType 为 undefined，继续走下去会在下面 selectType.value.type 抛错
+  if (!selectType.value?.type) {
+    uni.showToast({ title: t('video.noActiveSource'), icon: 'none' })
     return
   }
   popoverData.value.title = t('video.scanning')
   popoverData.value.list = getProgressList()
   showPopover.value = true
-  judgeSelect()
   if (selectType.value.type == 'Emby') {
     showPopover.value = false
   }
   emits('refresh')
-  timer.value = setTimeout(() => {
-    showPause.value = true
-  }, 30000)
 }
 
-//暂停取消扫描
+//取消本次刮削。取消后编排层不会落库，海报墙保持取消前的样子。
+//标题不在这里改：真实完成时间由父组件决定，统一交给 props.loading 的 watch 处理。
 const toCancel = () => {
-  popoverData.value.title = t('video.paused')
-  showPopover.value = false
-  showPause.value = false
-  clearTimeout(timer.value)
-  timer.value = null
   emits('pause')
 }
 
@@ -279,10 +284,18 @@ watch(
   val => {
     loading.value = val
     if (!val) {
-      popoverData.value.title = t('video.completedSyncVideos', { count: props.refreshData.success || 0 })
+      // 取消结束时，标题要说明是哪种结束，而不是一律报「已完成」
+      const reason = props.refreshData?.cancelReason
+      if (reason === 'user') {
+        // 取消后已刮到的批次会保留，文案要说清楚
+        popoverData.value.title = t('video.scanCancelledKeepPartial')
+      } else if (reason === 'tmdb') {
+        popoverData.value.title = t('video.tmdbUnavailable')
+      } else {
+        popoverData.value.title = t('video.scanCompleted')
+      }
       clearTimeout(timer.value)
       timer.value = null
-      showPause.value = false
     }
   },
   { deep: true }
@@ -405,6 +418,12 @@ onMounted(() => {
           right: 18px;
         }
 
+        // 气泡箭头：字体里的正三角朝上，转 180 度让它指向下方气泡
+        .video-navbar-popover__arrow-icon {
+          display: inline-block;
+          transform: rotate(180deg);
+        }
+
         .show-animation {
           animation: opacity1 0.2s ease;
         }
@@ -416,7 +435,9 @@ onMounted(() => {
         .video-navbar-popover__container {
           position: fixed;
           min-width: 100px;
-          background: #315ffd;
+          background: var(--app-bg-card);
+          border: 1px solid var(--app-border);
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16);
           z-index: 100;
           padding: 12px;
           border-radius: 10px;
@@ -429,13 +450,16 @@ onMounted(() => {
 
             .popover-title-left {
               font-size: 15px;
-              color: #fff;
+              color: var(--app-text-primary);
 
               .popover-title-left__button {
                 display: inline-block;
-                border: 1px solid #fff;
-                margin-left: 5px;
-                padding: 0 2px;
+                border: 1px solid var(--app-text-primary);
+                border-radius: 4px;
+                margin-left: 8px;
+                padding: 0 5px;
+                font-size: 13px;
+                line-height: 1.5;
               }
             }
 
@@ -460,13 +484,13 @@ onMounted(() => {
 
               span:first-child {
                 font-size: 14px;
-                color: #d0d0d0;
+                color: var(--app-text-tertiary);
               }
 
               span:last-child {
                 font-size: 14px;
                 padding-left: 3px;
-                color: #fff;
+                color: var(--app-text-primary);
                 font-weight: bold;
               }
             }

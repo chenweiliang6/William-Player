@@ -27,7 +27,7 @@
           <template #content>
             <div class="popover-content-list">
               <div class="popover-content-item" v-for="item in moreOptions" :key="item.key" @click="selectMore(item)">
-                <image :src="item.icon"  />
+                <wil-icon :name="item.icon" class="popover-content-icon" :custom-color="item.key === 'image' ? '#0052d9' : '#31c27c'" />
                 <span>{{ item.name }}</span>
               </div>
             </div>
@@ -35,7 +35,7 @@
         </t-popover>
       </template>
       <div class="ability-item" v-else @click="closeAbility">
-        <image :src="moreOptions.find(i => i.key === abilityType).activeIcon" color="#0052d9" />
+        <wil-icon :name="moreOptions.find(i => i.key === abilityType).icon" class="ability-icon" custom-color="#0052d9" />
         <span>{{ abilityType }}</span>
         <t-icon name="close" size="32rpx" :color="activeIconColor" />
       </div>
@@ -56,7 +56,7 @@
           <template #content>
             <div class="popover-content-list">
               <div class="popover-content-item" v-for="item in popoverOptions" :key="item.key" :source-type="item.sourceType" @click="chooseImage(item)">
-                <image :src="item.icon"  />
+                <wil-icon :name="item.icon" class="popover-content-icon" custom-color="var(--app-text-primary)" />
                 <span>{{ item.name }}</span>
               </div>
             </div>
@@ -80,17 +80,11 @@ import TChatSender from '@tdesign/uniapp-chat/chat-sender/chat-sender.vue'
 import TIcon from '@tdesign/uniapp/icon/icon.vue'
 import TPopover from '@tdesign/uniapp/popover/popover.vue'
 import wilUploader from '@/components/mobile/wil-uploader/index.vue'
-import uploadimageIcon from '@/static/uploadimage-icon.png'
-import uploadfileIcon from '@/static/uploadfile-icon.png'
-import uploadcameraIcon from '@/static/uploadcamera-icon.png'
-import moreImage from '@/static/more-image.png'
-import moreVideo from '@/static/more-video.png'
-import moreImageActive from '@/static/more-image-active.png'
-import moreVideoActive from '@/static/more-video-active.png'
 import * as CONFIG from '@/utils/config.js'
 import { computed, nextTick, ref } from 'vue'
 import { useThemeColors } from '@/hooks/useThemeColors'
 import { useI18n } from 'vue-i18n'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 
 const props = defineProps({
   loading: {
@@ -121,14 +115,14 @@ const attachmentsProps = ref({
 })
 
 const popoverOptions = computed(() => [
-  { key: 'uploadDocument', name: t('toolbox.uploadDocument'), icon: uploadfileIcon, sourceType: ['album'] },
-  { key: 'uploadImage', name: t('toolbox.uploadImage'), icon: uploadimageIcon, sourceType: ['album'] },
-  { key: 'takePhoto', name: t('toolbox.takePhoto'), icon: uploadcameraIcon, sourceType: ['camera'] },
+  { key: 'uploadDocument', name: t('toolbox.uploadDocument'), icon: 'wenjianshangchuan', sourceType: ['album'] },
+  { key: 'uploadImage', name: t('toolbox.uploadImage'), icon: 'tupianshangchuan', sourceType: ['album'] },
+  { key: 'takePhoto', name: t('toolbox.takePhoto'), icon: 'zhaoxiangji', sourceType: ['camera'] },
 ])
 
 const moreOptions = computed(() => [
-  { key: 'image', name: t('toolbox.imageGeneration'), icon: moreImage, activeIcon: moreImageActive, className: 'image' },
-  { key: 'video', name: t('toolbox.videoGeneration'), icon: moreVideo, activeIcon: moreVideoActive, className: 'video' },
+  { key: 'image', name: t('toolbox.imageGeneration'), icon: 'tupian1', className: 'image' },
+  { key: 'video', name: t('toolbox.videoGeneration'), icon: 'video', className: 'video' },
 ])
 
 let uploadFileId = 0
@@ -327,9 +321,8 @@ const stopMessage = () => {
           padding: 0 16rpx;
           border-radius: 16rpx;
 
-          image {
-            width: 36rpx;
-            height: 36rpx;
+          .ability-icon {
+            font-size: 36rpx;
             display: block;
             margin-right: 12rpx;
           }
@@ -368,9 +361,8 @@ const stopMessage = () => {
                 align-items: center;
                 padding: 12rpx 0;
                 cursor: pointer;
-                image {
-                  width: 36rpx;
-                  height: 36rpx;
+                .popover-content-icon {
+                  font-size: 36rpx;
                   display: block;
                   margin-right: 12rpx;
                 }
@@ -422,9 +414,8 @@ const stopMessage = () => {
                 align-items: center;
                 padding: 12rpx 0;
                 cursor: pointer;
-                image {
-                  width: 36rpx;
-                  height: 36rpx;
+                .popover-content-icon {
+                  font-size: 36rpx;
                   display: block;
                   margin-right: 12rpx;
                 }

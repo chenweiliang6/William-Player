@@ -83,6 +83,12 @@
       }
     },
     {
+      "path": "pages/mobile/media/folder-picker",
+      "style": {
+        "navigationBarTitleText": "%folderPicker.importDirectory%"
+      }
+    },
+    {
       "path": "pages/mobile/source/source-list",
       "style": {
         "navigationStyle": "custom"
@@ -222,6 +228,12 @@
       }
     },
     {
+      "path": "pages/mobile/mine/scrape-rules",
+      "style": {
+        "navigationBarTitleText": "%scrapeRules.title%"
+      }
+    },
+    {
       "path": "pages/mobile/mine/index",
       "style": {
         "navigationStyle": "custom"
@@ -271,6 +283,12 @@
         "text": "媒体库",
         "iconPath": "static/video.png",
         "selectedIconPath": "static/video-active.png"
+      },
+      {
+        "pagePath": "pages/mobile/source/source-list",
+        "text": "资源库",
+        "iconPath": "static/ziyuanku.png",
+        "selectedIconPath": "static/ziyuanku-active.png"
       },
       {
         "pagePath": "pages/mobile/live/index",

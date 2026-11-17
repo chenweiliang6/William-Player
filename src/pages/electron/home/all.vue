@@ -22,9 +22,11 @@
                 @error="imgError(item)"
                 @load="imgLoad(item)"
               />
+              <!-- 评分徽标：对齐爆米花，贴在海报右下角 -->
+              <span v-if="showVote(item)" class="item-vote">{{ voteText(item) }}</span>
             </div>
             <span class="item-name">{{ removeExtension(item) }}</span>
-            <span class="item-time" v-if="!item.notShowTime">{{ item.releaseTime || t('video.noReleaseTime') }}</span>
+            <span class="item-time" v-if="!item.notShowTime">{{ cardSubText(item, t) }}</span>
           </div>
         </template>
       </wil-list>
@@ -39,6 +41,7 @@ import { useVideoAll } from '@/hooks/useVideoAll'
 import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { handleSeasonName } from '@/utils/scrape'
+import { showVote, voteText, cardSubText } from '@/utils/card-meta'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -71,7 +74,7 @@ const {
 const toDetail = item => {
   router.push({
     path: '/homeDetail',
-    query: { name: handleSeasonName(item.name, true), type: item.type == '1' ? 'tv' : 'movie', source: JSON.stringify(item.source), movieTvId: item.movieTvId },
+    query: { name: handleSeasonName(item.name, true), type: item.type == '1' ? 'tv' : 'movie', source: JSON.stringify(item.source), movieTvId: item.movieTvId, workKey: item.workKey || '' },
   })
 }
 </script>
@@ -137,6 +140,21 @@ const toDetail = item => {
               color: gray;
               padding-top: 6rpx;
               display: block;
+            }
+
+            // 评分徽标：贴在海报右下角（.item-poster 已是 position: relative）
+            .item-vote {
+              position: absolute;
+              right: 8rpx;
+              bottom: 8rpx;
+              padding: 0 10rpx;
+              height: 34rpx;
+              line-height: 34rpx;
+              border-radius: 8rpx;
+              background: rgba(0, 0, 0, 0.6);
+              color: #ffc93c;
+              font-size: 22rpx;
+              font-weight: bold;
             }
           }
           &:nth-child(8n + 1) {

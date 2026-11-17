@@ -11,7 +11,7 @@
                 <div class="right-info">
                     <div class="right-info-date">2024-10-28</div>
                     <div class="right-info-star">
-                        <img src="@/static/star-fill.png">
+                        <wil-icon name="shoucang" custom-color="#f4bc22" />
                         <span>9.2</span>
                     </div>
                     <div class="right-info-genres">{{ t('video.genre') }}</div>
@@ -47,6 +47,7 @@
 
 <script setup>
 import { useI18n } from 'vue-i18n'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 
 const { t } = useI18n()
 </script>
@@ -146,9 +147,8 @@ const { t } = useI18n()
                     align-items: center;
                     margin-left: 50rpx;
 
-                    img {
-                        width: 30rpx;
-                        height: 30rpx;
+                    .iconfont {
+                        font-size: 30rpx;
                         opacity: 0;
                     }
                 }

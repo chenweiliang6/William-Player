@@ -14,7 +14,7 @@
                             <div class="right-info">
                                 <div class="right-info-date">{{ data.releaseTime }}</div>
                                 <div class="right-info-star">
-                                    <image src="@/static/star-fill.png"></image>
+                                    <wil-icon name="shoucang" custom-color="#f4bc22" />
                                     <span>{{ data.voteAverage.toFixed(1) }}</span>
                                 </div>
                                 <div class="right-info-genres">{{ data.genres }}</div>
@@ -29,9 +29,10 @@
 </template>
 
 <script setup>
+import wilIcon from '@/components/common/wil-icon/index.vue'
 import wilSwiper from "@/components/mobile/wil-swiper/index.vue";
 import { ref, onBeforeMount } from "vue";
-import { classifyList, handleSeasonName } from "@/utils/scrape";
+import { classifyList, handleSeasonName, getMovieTvData } from "@/utils/scrape";
 import { onShow } from "@dcloudio/uni-app";
 import * as CONFIG from "@/utils/config";
 import { useRouter } from "vue-router";
@@ -64,7 +65,8 @@ const toVideoDetail = (item) => {
             name: handleSeasonName(item.name, true),
             type: item.type,
             source: JSON.stringify(item.source),
-            movieTvId: item.movieTvId
+            movieTvId: item.movieTvId,
+            workKey: item.workKey || ''
         }
     })
 };
@@ -81,7 +83,7 @@ const evtMove = (keyCode) => {
     } else if (keyCode === "KeyUp") {
         emits("setFocus", "tvNavbar", "KeyUp");
     } else if (keyCode === "KeyDown") {
-        let localMovieTvData = uni.getStorageSync("localMovieTvData");
+        let localMovieTvData = getMovieTvData();
         if (props.historyPlay.length) {
             emits("setFocus", "recentPlayed", "KeyDown");
             return;
@@ -109,7 +111,7 @@ defineExpose({
 onShow(() => {
     //为什么在onShow中呢，是因为可能会清空影片列表，此时也需要更新轮播列表
     classifyList1.value = JSON.parse(JSON.stringify(classifyList));
-    let localMovieTvData = uni.getStorageSync("localMovieTvData") || {};
+    let localMovieTvData = getMovieTvData() || {};
     let tv = [];
     if (localMovieTvData?.tv) {
         tv = localMovieTvData.tv.filter((v) => v.voteAverage).sort((a, b) => b.voteAverage - a.voteAverage);

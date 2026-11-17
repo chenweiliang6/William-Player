@@ -23,9 +23,24 @@ page,
   --app-btn-primary-text: #ffffff;
   --app-icon: #000000;
   --app-icon-muted: #bbbbbb;
+  // 图标强色/禁用色，取自原 -black(#000015) 与 -gray(#c5c6d0) PNG 实测主色
+  --app-icon-strong: #000015;
+  --app-icon-disabled: #c5c6d0;
   --app-gradient-mine: linear-gradient(180deg, #ffd3b1 0%, #fff5ec 30%, #f6f7f8 70%);
   --app-navbar-bg: #ffffff;
   --app-tabbar-bg: #ffffff;
+
+  // --- 动效 token ---
+  --app-ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --app-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --app-duration-fast: 150ms;
+  --app-duration-base: 250ms;
+  --app-duration-slow: 600ms;
+
+  // --- 骨架屏配色（高光用半透明白，避免纯白刺眼）---
+  --app-skeleton-base: rgba(0, 0, 0, 0.06);
+  --app-skeleton-base-strong: rgba(0, 0, 0, 0.1);
+  --app-skeleton-highlight: rgba(255, 255, 255, 0.55);
 
   // --- NutUI 关键变量对接 ---
   --nut-title-color: var(--app-text-secondary);
@@ -58,9 +73,17 @@ page,
   --app-btn-primary-text: #090909;
   --app-icon: #ffffff;
   --app-icon-muted: #ffffff;
+  // 深色下强色即白色：原 -white 那套 PNG 的存在意义被变量取代
+  --app-icon-strong: #ffffff;
+  --app-icon-disabled: #c5c6d0;
   --app-gradient-mine: var(--app-bg);
   --app-navbar-bg: #1e1e20;
   --app-tabbar-bg: #1e1e20;
+
+  // --- 骨架屏配色（深色下用半透明白做底、更亮的高光）---
+  --app-skeleton-base: rgba(255, 255, 255, 0.07);
+  --app-skeleton-base-strong: rgba(255, 255, 255, 0.12);
+  --app-skeleton-highlight: rgba(255, 255, 255, 0.14);
 
   // --- NutUI 深色变量覆写 ---
   --nut-title-color: var(--app-text-secondary);

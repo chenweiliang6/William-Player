@@ -123,10 +123,11 @@ export const http139 = (url, { method = 'GET', data, header = {}, timeout = 2000
 
 /**
  * yun.139.com 域 mcloud-sign 签名请求（对齐 Go request/personalRequest 的头部组装）
- * @param {object} opts { pathname, data, authorization, personalHost, svcType }
+ * @param {object} opts { pathname, data, authorization, personalHost, svcType, timeout }
+ *        timeout 不传时由 http139 的默认值（20000）兜底
  * @returns {Promise<object>} JSON 响应
  */
-export const request139Cloud = async ({ pathname, data, authorization, personalHost, svcType = '1' }) => {
+export const request139Cloud = async ({ pathname, data, authorization, personalHost, svcType = '1', timeout }) => {
   const url = `${personalHost || 'https://yun.139.com'}${pathname}`
   const ts = formatCloudTs(new Date())
   const randStr = randomString(16)
@@ -154,7 +155,7 @@ export const request139Cloud = async ({ pathname, data, authorization, personalH
     'Content-Type': 'application/json;charset=UTF-8',
   }
 
-  const res = await http139(url, { method: 'POST', data: bodyStr, header })
+  const res = await http139(url, { method: 'POST', data: bodyStr, header, timeout })
   const body = typeof res.data === 'string' ? JSON.parse(res.data) : res.data
   if (!body.success) {
     throw { code: body.code || 'CLOUD139_RSP_FAIL', message: body.message || '139 cloud request failed' }

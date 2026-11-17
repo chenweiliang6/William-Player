@@ -19,8 +19,7 @@
     </div>
     <div class="login-policy">
       <div class="login-policy-privacy" @click="changePrivacy">
-        <div class="square-unselect" v-if="!checkPolicy"></div>
-        <img src="@/static/square-select.png" style="width: 32rpx; height: 32rpx" v-else />
+        <wil-icon name="kqxz" :custom-color="checkPolicy ? '#ff6701' : '#c8c9cc'" class="policy-check" />
         <div class="login-policy-privacy__text">
           <span>{{ t('auth.readAndAgree') }}</span>
           <span @click.stop="openAgreement">{{ t('auth.userAgreement') }}</span>
@@ -29,8 +28,7 @@
         </div>
       </div>
       <div class="login-policy-remember" @click="changePassword">
-        <div class="square-unselect" v-if="!checkRemember"></div>
-        <img src="@/static/square-select.png" style="width: 32rpx; height: 32rpx" v-else />
+        <wil-icon name="kqxz" :custom-color="checkRemember ? '#ff6701' : '#c8c9cc'" class="policy-check" />
         <span>{{ t('auth.rememberPassword') }}</span>
       </div>
     </div>
@@ -40,6 +38,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import wilForm from '@/components/mobile/wil-form/index.vue'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 import { loginByPhone, loginByEmail, getWeUserByopenId } from '@/network/apis'
 import { encrypt } from '@/utils/jsencrypt.js'
 import { getUserByopenId } from '../../mobile/mine/common'
@@ -359,11 +358,8 @@ initAccount()
     .login-policy-privacy {
       display: flex;
       align-items: center;
-      .square-unselect {
-        width: 32rpx;
-        height: 32rpx;
-        border: 2rpx solid #dcdfe6;
-        border-radius: 6rpx;
+      .policy-check {
+        font-size: 32rpx;
       }
       :deep(.nut-checkbox) {
         margin-right: 0;
@@ -404,11 +400,8 @@ initAccount()
       align-items: center;
       margin-top: 24rpx;
       cursor: pointer;
-      .square-unselect {
-        width: 32rpx;
-        height: 32rpx;
-        border: 2rpx solid #dcdfe6;
-        border-radius: 6rpx;
+      .policy-check {
+        font-size: 32rpx;
       }
       span {
         color: #86909c;

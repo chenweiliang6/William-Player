@@ -15,9 +15,11 @@
                   :src="(!routerParams.isConnected && !item.loadImg) ? emptyBg : setEmptyImg(item.poster)"
                   class="item-poster-image" mode="aspectFill" @error="imgError(item)" @load="imgLoad(item)">
                 </image>
+                <!-- 评分徽标：对齐爆米花，贴在海报右下角 -->
+                <span v-if="showVote(item)" class="item-vote">{{ voteText(item) }}</span>
               </div>
               <span class="item-name">{{ removeExtension(item) }}</span>
-              <span class="item-time" v-if="!isRecent">{{ item.releaseTime || t('common.none') }}</span>
+              <span class="item-time" v-if="!isRecent">{{ cardSubText(item, t) }}</span>
             </div>
           </template>
         </wil-list>
@@ -34,6 +36,7 @@ import { useI18n } from 'vue-i18n'
 import { useVideoAll } from "@/hooks/useVideoAll";
 import tvPage from "@/components/tv/tv-page/index.vue";
 import { debounce } from "@/utils/scrape";
+import { showVote, voteText, cardSubText } from "@/utils/card-meta";
 
 const wil_list = ref(null);
 const wil_modal = ref(null);
@@ -186,6 +189,23 @@ page {
               color: gray;
               padding-top: 6rpx;
               display: block;
+            }
+
+            // 评分徽标：.item-poster 有 6rpx 透明边框，偏移要多让出 6rpx，
+            // 否则徽标会压在边框上、焦点态切橙框时看着偏位。
+            // 尺寸用 px —— TV 端 rpxCalcMaxDeviceWidth 700，rpx 会缩得很小。
+            .item-vote {
+              position: absolute;
+              right: 14rpx;
+              bottom: 14rpx;
+              padding: 0 6px;
+              height: 22px;
+              line-height: 22px;
+              border-radius: 5px;
+              background: rgba(0, 0, 0, 0.6);
+              color: #ffc93c;
+              font-size: 14px;
+              font-weight: bold;
             }
           }
 

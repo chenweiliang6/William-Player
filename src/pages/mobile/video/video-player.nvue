@@ -12,6 +12,7 @@
           :showPre="this.historyObj.ji > 1"
           :showNext="this.historyObj.ji < tvList.length"
           :initialFullScreen="false"
+          :zoomMode="zoomMode"
           @timeupdate="setHistory"
           @getpipstatus="getPipStatus"
           @pause="pauseVideo"
@@ -72,6 +73,7 @@ import { sortVideoList, filterVideoFormat } from '@/utils/player-common'
 import { calTime, handleSeasonName, generateChineseNumberMapping } from '@/utils/scrape'
 import { getEmbyPlayerUrl } from '@/utils/emby'
 import { IMG_DOMAIN } from '@/utils/config'
+import { findActiveSource } from '@/utils/tools'
 
 export default {
   components: {
@@ -98,6 +100,8 @@ export default {
       pipStatus: false,
       videoHeight: '580rpx',
       settingData: {},
+      //画面模式:0 适应(留黑边) / 1 铺满裁剪 / 2 拉伸。单独用 ref 便于播放中切换
+      zoomMode: 0,
       emptyUrl:
         'https://wxsnsdy.tc.qq.com/105/20210/snsdyvideodownload?filekey=30280201010421301f0201690402534804102ca905ce620b1241b726bc41dcff44e00204012882540400&bizid=1023&hy=SH&fileparam=302c020101042530230204136ffd93020457e3c4ff02024ef202031e8d7f02030f42400204045a320a0201000400',
       config: {
@@ -142,11 +146,31 @@ export default {
     },
 
     //判断选择的是webdav还是天翼云盘还是夸克
+    //优先用 URL 里带过来的 srcType/srcAccount（详情页选中的那个版本所属的源），
+    //取不到才退回「全局激活源」。这样切到非激活源的版本也能正确取流。
     judgeSelect() {
-      this.sourceList = uni.getStorageSync('sourceList')
+      this.sourceList = uni.getStorageSync('sourceList') || []
+      const { srcType, srcAccount } = this.routerParams || {}
+
+      if (srcType) {
+        const group = this.sourceList.find(item => item.type === srcType)
+        if (group?.list?.length) {
+          // 同类型下可能有多个账号，按账号名精确匹配
+          const exact = srcAccount
+            ? group.list.find(v => v.name === srcAccount)
+            : null
+          const target = exact || findActiveSource(group.list) || group.list[0]
+          if (target) {
+            this.selectType = group
+            this.selectMedia = target
+            return
+          }
+        }
+      }
+
       this.selectType =
         this.sourceList.find(item => {
-          let select = item.list.find(i => i.active)
+          let select = findActiveSource(item.list)
           if (select) {
             this.selectMedia = select
             return true
@@ -470,7 +494,7 @@ export default {
 
     async handleTv(data) {
       this.showRehandleButton = false
-      let localMovieTvData = uni.getStorageSync('localMovieTvData') || {}
+      let localMovieTvData = getMovieTvData() || {}
       const lastIndex = data.path.lastIndexOf('/')
       let nowTv = localMovieTvData.tv.find(i => {
         return (
@@ -548,10 +572,11 @@ export default {
     let systemInfo = uni.getSystemInfoSync()
     this.plateForm = systemInfo.platform
     this.uniPlatform = systemInfo.uniPlatform
-    this.settingData = uni.getStorageSync('settingData')
+    this.settingData = uni.getStorageSync('settingData') || {}
+    this.zoomMode = this.settingData.zoomMode || 0
     if (this.uniPlatform != 'app') {
       uni.showToast({
-        title: '目前仅支持AAC格式音频和内嵌字幕，不支持EAC3格式音频和外挂字幕',
+        title: '当前为 H5 预览模式，部分音视频格式可能不支持',
         duration: 3000,
         icon: 'none',
       })

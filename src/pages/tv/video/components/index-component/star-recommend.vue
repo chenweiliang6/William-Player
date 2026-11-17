@@ -10,14 +10,14 @@
               <div class="left-info">
                 <div class="left-info-date">{{ data.releaseTime }}</div>
                 <div class="left-info-star">
-                  <image src="@/static/star-fill.png"></image>
+                  <wil-icon name="shoucang" custom-color="#f4bc22"></wil-icon>
                   <span>{{ data.voteAverage.toFixed(1) }}</span>
                 </div>
                 <div class="left-info-genres">{{ data.genres }}</div>
               </div>
               <div class="left-desc">{{ data.overview }}</div>
               <div class="left-button" :style="{ border: props.isFocus ? '6rpx solid #ff6701' : '6rpx solid #e9dfd3' }">
-                <image src="@/static/play-black.png"></image>
+                <wil-icon name="icon_play" custom-color="#000015"></wil-icon>
                 <span>{{ t('video.watchNow') }}</span>
               </div>
             </div>
@@ -33,10 +33,11 @@
 
 <script setup>
 import wilSwiper from "@/components/mobile/wil-swiper/index.vue";
+import wilIcon from "@/components/common/wil-icon/index.vue";
 import { ref, onBeforeMount, watch } from "vue";
 import { useI18n } from 'vue-i18n'
 import { useLocaleStore } from '@/stores/locale'
-import { classifyList, handleSeasonName } from "@/utils/scrape";
+import { classifyList, handleSeasonName, getMovieTvData } from "@/utils/scrape";
 import { onShow } from "@dcloudio/uni-app";
 import * as CONFIG from "@/utils/config";
 const { t } = useI18n()
@@ -45,6 +46,8 @@ const localeStore = useLocaleStore()
 const props = defineProps({
   isFocus: { type: Boolean, default: true },
   historyPlay: { type: Array, default: [] },
+  // 下移时的目标焦点：第一个可见的分类分区（父组件按焦点序列算好）
+  nextFocus: { type: String, default: '' },
 });
 const emits = defineEmits(["getStarList", "change", "setFocus"]);
 const wil_swiper = ref(null);
@@ -61,7 +64,7 @@ const removeExtension = (filename) => {
 
 const toVideoDetail = (item) => {
   uni.navigateTo({
-    url: `/pages/tv/video/video-detail?path=${item.path}&name=${handleSeasonName(item.name, true)}&type=${item.type}&source=${JSON.stringify(item.source)}&movieTvId=${item.movieTvId}`,
+    url: `/pages/tv/video/video-detail?path=${item.path}&name=${handleSeasonName(item.name, true)}&type=${item.type}&source=${JSON.stringify(item.source)}&movieTvId=${item.movieTvId}&workKey=${encodeURIComponent(item.workKey || '')}`,
   });
 };
 
@@ -82,19 +85,13 @@ const evtMove = (keyCode) => {
   } else if (keyCode === "KeyUp") {
     emits("setFocus", "tvNavbar", "KeyUp");
   } else if (keyCode === "KeyDown") {
-    let localMovieTvData = uni.getStorageSync("localMovieTvData");
     if (props.historyPlay.length) {
       emits("setFocus", "recentPlayed", "KeyDown");
       return;
     }
-    if (localMovieTvData?.movie?.length) {
-      emits("setFocus", "hxMovie", "KeyDown");
-      return;
-    }
-    if (localMovieTvData?.tv?.length) {
-      emits("setFocus", "hxTv", "KeyDown");
-      return;
-    }
+    // 分类分区是动态的，第一个分类由父组件算好传入，
+    // 不再按 movie→tv 顺序硬编码
+    if (props.nextFocus) emits("setFocus", props.nextFocus, "KeyDown");
   }
 };
 
@@ -109,7 +106,7 @@ defineExpose({
 
 const getRecommendList = () => {
   classifyList1.value = JSON.parse(JSON.stringify(classifyList));
-  let localMovieTvData = uni.getStorageSync("localMovieTvData") || {};
+  let localMovieTvData = getMovieTvData() || {};
   let tv = [];
   if (localMovieTvData?.tv) {
     tv = localMovieTvData.tv.filter((v) => v.voteAverage).sort((a, b) => b.voteAverage - a.voteAverage);
@@ -223,9 +220,8 @@ watch(
                   align-items: center;
                   margin-left: 50rpx;
 
-                  image {
-                    width: 30rpx;
-                    height: 30rpx;
+                  .iconfont {
+                    font-size: 30rpx;
                   }
                 }
 
@@ -256,9 +252,8 @@ watch(
                 border-radius: 40rpx;
                 margin-top: 40rpx;
 
-                image {
-                  width: 35rpx;
-                  height: 35rpx;
+                .iconfont {
+                  font-size: 35rpx;
                 }
 
                 span {

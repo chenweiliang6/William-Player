@@ -30,18 +30,19 @@
       </wil-list>
     </div>
     <div class="video-search-list" v-if="listData.length && !isEmby">
-      <searchBox :data="item" v-for="item in listData" :key="item.movieTvId" @click="toVideoDetail(item)" :oldValue="oldValue" :isEmby="false"></searchBox>
+      <searchBox :data="item" v-for="item in listData" :key="item.workKey || (item.type + '-' + item.movieTvId)" @click="toVideoDetail(item)" :oldValue="oldValue" :isEmby="false"></searchBox>
     </div>
     <wil-empty v-if="!listData.length" :text="t('video.onlySearchVideoName')"></wil-empty>
   </div>
 </template>
 
 <script setup>
+import { getMovieTvData } from '@/utils/scrape'
 import { computed, ref } from 'vue'
 import wilNavbar from '@/components/mobile/wil-navbar/index.vue'
 import wilEmpty from '@/components/mobile/wil-empty/index.vue'
 import wilList from '@/components/mobile/wil-list/index.vue'
-import { handleSeasonName } from '@/utils/scrape.js'
+import { handleSeasonName } from '@/utils/scrape'
 import { onLoad } from '@dcloudio/uni-app'
 import searchBox from './components/index-component/search-box.vue'
 import { getEmbyList, setEmbyImg } from '@/utils/emby'
@@ -69,7 +70,7 @@ const toSearch = () => {
     requestParams.value = {}
     wil_list.value.reload()
   } else {
-    let data = uni.getStorageSync('localMovieTvData') || {}
+    let data = getMovieTvData() || {}
     let movieArr = (data.movie || []).filter(item => item.name.indexOf(searchValue.value) > -1)
     let tvArr = (data.tv || []).filter(item => item.name.indexOf(searchValue.value) > -1)
     listData.value = [...movieArr, ...tvArr]
@@ -98,7 +99,7 @@ const toVideoDetail = item => {
     })
   } else {
     uni.navigateTo({
-      url: `/pages/mobile/video/video-detail?path=${item.path}&name=${handleSeasonName(item.name, true)}&type=${item.type == '1' ? 'tv' : 'movie'}&source=${JSON.stringify(item.source)}&movieTvId=${item.movieTvId}`,
+      url: `/pages/mobile/video/video-detail?path=${item.path}&name=${handleSeasonName(item.name, true)}&type=${item.type == '1' ? 'tv' : 'movie'}&source=${JSON.stringify(item.source)}&movieTvId=${item.movieTvId}&workKey=${encodeURIComponent(item.workKey || '')}`,
     })
   }
 }

@@ -7,15 +7,15 @@
       <div class="player-control-center">
         <div :class="['player-control-center-left', controlVisible ? 'showLeft' : '']">
           <div class="player-control-center-left__audio" @click="getAudioTrack">
-            <img src="@/static/yinpin-white.png" />
+            <wil-icon name="wang" custom-color="#ffffff" />
           </div>
           <div class="player-control-center-left__text" @click="getSubTitleTrack">
-            <img src="@/static/zimu-white.png" />
+            <wil-icon name="zimu" custom-color="#ffffff" />
           </div>
         </div>
         <div :class="['player-control-center-right', controlVisible ? 'showRight' : '']">
           <div class="player-control-center-right__lock">
-            <img src="@/static/noLock-white.png" />
+            <wil-icon name="kaisuo" custom-color="#ffffff" />
           </div>
         </div>
       </div>
@@ -30,14 +30,14 @@
         </div>
         <div class="player-control-bottom-bottom">
           <div class="bottom-left">
-            <img src="@/static/prevEpisode-white.png" />
-            <img src="@/static/pause-white.png" @click="onPause" v-if="!props.paused" />
-            <img src="@/static/play-white.png" @click="onPause" v-else />
-            <img src="@/static/nextEpisode-white.png" />
+            <wil-icon name="shangyiji" custom-color="#ffffff" />
+            <wil-icon name="zanting" custom-color="#ffffff" @click="onPause" v-if="!props.paused" />
+            <wil-icon name="icon_play" custom-color="#ffffff" @click="onPause" v-else />
+            <wil-icon name="xiayiji" custom-color="#ffffff" />
           </div>
           <div class="bottom-right">
-            <img src="@/static/fullscreen-white.png" @click="onFullscreen" v-if="!props.fullScreen" />
-            <img src="@/static/exitscreen-white.png" @click="onFullscreen" v-else />
+            <wil-icon name="quanping" custom-color="#ffffff" @click="onFullscreen" v-if="!props.fullScreen" />
+            <wil-icon name="tuichuquanping" custom-color="#ffffff" @click="onFullscreen" v-else />
           </div>
         </div>
       </div>
@@ -48,8 +48,9 @@
 
 <script setup>
 import { onMounted, ref, watch } from 'vue'
-import { handleSecond } from '@/utils/scrape.js'
+import { handleSecond } from '@/utils/scrape'
 import Popover from '@/components/electron/wil-popover/index.vue'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 import { ipc } from '@/utils/ipcRenderer'
 import { ipcApiRoute } from '@/utils/ipcApiRoute'
 import { useI18n } from 'vue-i18n'
@@ -304,9 +305,8 @@ onMounted(() => {
           align-items: center;
           justify-content: center;
 
-          img {
-            width: 60rpx;
-            height: 60rpx;
+          .iconfont {
+            font-size: 60rpx;
           }
         }
 
@@ -321,9 +321,8 @@ onMounted(() => {
           justify-content: center;
           margin-top: 80rpx;
 
-          img {
-            width: 70rpx;
-            height: 70rpx;
+          .iconfont {
+            font-size: 70rpx;
           }
         }
       }
@@ -347,9 +346,8 @@ onMounted(() => {
           align-items: center;
           justify-content: center;
 
-          img {
-            width: 70rpx;
-            height: 70rpx;
+          .iconfont {
+            font-size: 70rpx;
           }
         }
       }
@@ -414,9 +412,8 @@ onMounted(() => {
         margin-top: 40rpx;
 
         .bottom-left {
-          img {
-            width: 60rpx;
-            height: 60rpx;
+          .iconfont {
+            font-size: 60rpx;
             cursor: pointer;
             margin-left: 30rpx;
 
@@ -427,9 +424,8 @@ onMounted(() => {
         }
 
         .bottom-right {
-          img {
-            width: 60rpx;
-            height: 60rpx;
+          .iconfont {
+            font-size: 60rpx;
             cursor: pointer;
           }
         }

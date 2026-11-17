@@ -20,7 +20,7 @@
       <wil-empty v-else :text="t('media.noFilesCheckSource')" class="video-list1-tip"></wil-empty>
     </div>
     <div class="video-link" @click="openModal">
-      <image src="@/static/link-icon.png"  />
+      <wil-icon name="link-icon" />
     </div>
     <wil-modal ref="wil_modal">
       <wil-form v-model="state.formData" :options="options" ref="base_form">
@@ -42,6 +42,7 @@ import { useThemeClass } from '@/hooks/useThemeClass'
 import wilEmpty from "@/components/mobile/wil-empty/index.vue";
 import wilModal from "@/components/mobile/wil-modal/index.vue";
 import wilForm from "@/components/mobile/wil-form/index.vue";
+import wilIcon from "@/components/common/wil-icon/index.vue";
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -122,23 +123,28 @@ const refreshWebDAVModule = async () => {
   let num1 = 0;
   let num2 = 0;
   let num3 = 0;
+  // alist 会在 token 过期/目录不可用时抛错，单个目录失败不该让整次统计挂掉
   await Promise.all(
     listData.value.map(async (item) => {
-      let res = await getFolder({ path: "/" + item.name }, selectMedia.value);
-      let movie = res.data.content.find((i) => i.name == "电影");
-      let tv = res.data.content.find((i) => i.name == "电视剧");
-      let other = res.data.content.find((i) => i.name == "其他");
-      if (movie) {
-        let resmovie = await getFolder({ path: "/" + item.name + "/电影" }, selectMedia.value);
-        num1 += resmovie.data.total;
-      }
-      if (tv) {
-        let restv = await getFolder({ path: "/" + item.name + "/电视剧" }, selectMedia.value);
-        num2 += restv.data.total;
-      }
-      if (other) {
-        let resother = await getFolder({ path: "/" + item.name + "/其他" }, selectMedia.value);
-        num3 += resother.data.total;
+      try {
+        let res = await getFolder({ path: "/" + item.name }, selectMedia.value);
+        let movie = res.data.content.find((i) => i.name == "电影");
+        let tv = res.data.content.find((i) => i.name == "电视剧");
+        let other = res.data.content.find((i) => i.name == "其他");
+        if (movie) {
+          let resmovie = await getFolder({ path: "/" + item.name + "/电影" }, selectMedia.value);
+          num1 += resmovie.data.total;
+        }
+        if (tv) {
+          let restv = await getFolder({ path: "/" + item.name + "/电视剧" }, selectMedia.value);
+          num2 += restv.data.total;
+        }
+        if (other) {
+          let resother = await getFolder({ path: "/" + item.name + "/其他" }, selectMedia.value);
+          num3 += resother.data.total;
+        }
+      } catch (e) {
+        console.warn("[media/list] 统计目录失败:", item.name, e?.message);
       }
     })
   ).then(() => {
@@ -331,15 +337,22 @@ onShow(async () => {
   judgeSelect();
   if (selectType.value.type == "WebDAV") {
     if (selectMedia.value.name) {
-      await loginUser();
-      let res = await getFolder({}, selectMedia.value);
-      listData.value = res.data.content.map((item) => {
-        if (item.type == "1") {
-          item.leftIcon = Folder;
-        }
-        delete item.size;
-        return item;
-      });
+      try {
+        await loginUser();
+        let res = await getFolder({}, selectMedia.value);
+        listData.value = res.data.content.map((item) => {
+          if (item.type == "1") {
+            item.leftIcon = Folder;
+          }
+          delete item.size;
+          return item;
+        });
+      } catch (e) {
+        // alist 未开启 / 地址不通 / token 拿不到：留着空列表并提示，避免白屏
+        console.warn("[media/list] 读取 WebDAV 根目录失败:", e?.message);
+        listData.value = [];
+        uni.showToast({ title: t('source.scanFailedCheckLogin'), icon: "none" });
+      }
     }
   } else if (selectType.value.type == "天翼云盘") {
     if (selectMedia.value.name) {
@@ -545,9 +558,9 @@ page {
     bottom: 90rpx;
     right: 30rpx;
     box-shadow: 0 8rpx 12rpx #5b73a01a;
-    image {
-      width: 60rpx;
-      height: 60rpx;
+    .iconfont {
+      font-size: 60rpx;
+      color: #ffffff;
     }
   }
   ::v-deep .nut-popup {

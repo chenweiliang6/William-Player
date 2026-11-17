@@ -4,19 +4,37 @@
     {
       "name": "pc-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev:pc"],
+      "runtimeArgs": [
+        "run",
+        "dev:pc"
+      ],
       "port": 5173
     },
     {
       "name": "mobile-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev:mobile"],
+      "runtimeArgs": [
+        "run",
+        "dev:mobile"
+      ],
       "port": 5173
     },
     {
       "name": "tv-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev:tv"],
+      "runtimeArgs": [
+        "run",
+        "dev:tv"
+      ],
+      "port": 5173
+    },
+    {
+      "name": "h5-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev:h5"
+      ],
       "port": 5173
     }
   ]

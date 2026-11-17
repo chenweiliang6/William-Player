@@ -30,7 +30,7 @@ import i18n from "@/i18n";
 import { addOperLog } from "@/network/apis";
 import { getWebDAVUrl, get189VideoUrl, loginUser, getQuarkResolutionUrl, getQuarkVideoUrl, getWopanVideoUrl, get139VideoUrl, getFolder, getTvSeason, get189Folder, getQuarkFolder, getWopanFolder, get139Folder } from "@/utils/common";
 import { sortVideoList, filterVideoFormat } from "@/utils/player-common";
-import { calTime, handleSeasonName, generateChineseNumberMapping } from "@/utils/scrape";
+import { calTime, handleSeasonName, generateChineseNumberMapping, getMovieTvData } from "@/utils/scrape";
 import { IMG_DOMAIN } from "@/utils/config";
 
 export default {
@@ -85,8 +85,25 @@ export default {
       return i18n.global.t(key, values);
     },
     //判断选择的是webdav还是天翼云盘还是夸克
+    // 优先用 URL 里的 srcType/srcAccount（资源库按导入条目打开时使用，
+    // 那个账号可能不是全局激活账号），取不到才退回「active 账号」。
     judgeSelect() {
-      this.sourceList = uni.getStorageSync("sourceList");
+      this.sourceList = uni.getStorageSync("sourceList") || [];
+      const { srcType, srcAccount } = this.routerParams || {};
+
+      if (srcType) {
+        const group = this.sourceList.find((item) => item.type === srcType);
+        if (group?.list?.length) {
+          const exact = srcAccount ? group.list.find((v) => v.name === srcAccount) : null;
+          const target = exact || group.list.find((i) => i.active) || group.list[0];
+          if (target) {
+            this.selectType = group;
+            this.selectMedia = target;
+            return;
+          }
+        }
+      }
+
       this.selectType =
         this.sourceList.find((item) => {
           let select = item.list.find((i) => i.active);
@@ -398,7 +415,7 @@ export default {
 
     async handleTv(data) {
       this.showRehandleButton = false;
-      let localMovieTvData = uni.getStorageSync("localMovieTvData") || {};
+      let localMovieTvData = getMovieTvData() || {};
       const lastIndex = data.path.lastIndexOf("/");
       let nowTv = localMovieTvData.tv.find((i) => {
         return (

@@ -64,9 +64,11 @@ const hasRespError = body =>
 
 /**
  * 签名请求封装（对齐 Go request()：clientSuffix + params 加密 + HMAC 签名头 + 失效刷新重试一次）
+ * @param {object} opts { operate, url, params, isRetry, timeout }
+ *        timeout 不传时由 request189 的默认值（15000）兜底
  * @returns 映射后的旧结构响应（成功强制注入 res_code: 0）
  */
-const signedRequest = async (token, { operate = 'GET', url, params, isRetry = false } = {}) => {
+const signedRequest = async (token, { operate = 'GET', url, params, isRetry = false, timeout } = {}) => {
   const suffix = clientSuffix()
   const query = { ...suffix }
   let paramsHex = ''
@@ -87,12 +89,13 @@ const signedRequest = async (token, { operate = 'GET', url, params, isRetry = fa
       Referer: 'https://cloud.189.cn',
     },
     responseType: 'text',
+    timeout,
   })
 
   const rawText = typeof res.data === 'string' ? res.data : JSON.stringify(res.data)
   if (isSessionInvalid(rawText) && !isRetry) {
     const newToken = await ensureSession(token)
-    return signedRequest(newToken, { operate, url, params, isRetry: true })
+    return signedRequest(newToken, { operate, url, params, isRetry: true, timeout })
   }
 
   let body
@@ -111,8 +114,9 @@ const signedRequest = async (token, { operate = 'GET', url, params, isRetry = fa
 /**
  * 文件列表（对齐 Go getFilesWithPage 个人云分支）
  * 响应 fileListAO.fileList/folderList/count 与网页版同构，恒等透传
+ * @param {object} [opts] { timeout } 刮削时用来取消超时限制
  */
-export const list189Files = async (data, token) => {
+export const list189Files = async (data, token, opts = {}) => {
   return signedRequest(token, {
     url: `${API_URL}/listFiles.action`,
     params: {
@@ -126,6 +130,7 @@ export const list189Files = async (data, token) => {
       orderBy: 'filename',
       descending: 'false',
     },
+    timeout: opts.timeout,
   })
 }
 

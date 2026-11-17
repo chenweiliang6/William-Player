@@ -33,7 +33,7 @@
         </template>
         <template #title="item">
           <div class="alipay-cell" v-if="bindOne.includes(item.key)">
-            <image :src="userInfo?.[item.prop] ? bindedIcon : nobindedIcon"  />
+            <wil-icon name="bangdingchenggong" :custom-color="userInfo?.[item.prop] ? successColor : dangerColor" />
             <span :style="{ color: userInfo?.[item.prop] ? successColor : dangerColor }">{{ userInfo?.[item.prop] ? t('mine.bound') : t('mine.unbound') }}</span>
           </div>
           <span :style="{ color: item.value ? textSecondaryColor : textPlaceholderColor }" v-else>{{ item.value || item.placeholder }}</span>
@@ -54,8 +54,7 @@ import * as CONFIG from '@/utils/config.js'
 import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { editUserInfo } from '@/network/apis.js'
-import bindedIcon from '@/static/binded-icon.png'
-import nobindedIcon from '@/static/nobinded-icon.png'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 import { bindAlipay, unbindAlipay, bindQQ, unbindQQ, bindWechat, unbindWechat } from '@/network/apis'
 import { useThemeNavbar } from '@/hooks/useThemeNavbar'
 import { useI18nNavbar } from '@/hooks/useI18nNavbar'
@@ -333,10 +332,9 @@ page {
               align-items: center;
               //   justify-content: space-between;
 
-              image {
+              .iconfont {
                 display: block;
-                width: 30rpx;
-                height: 30rpx;
+                font-size: 30rpx;
               }
               span {
                 color: var(--app-danger);

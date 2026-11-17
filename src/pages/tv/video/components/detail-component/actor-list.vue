@@ -69,12 +69,23 @@ const getActorById = (data, type) => {
     });
 };
 const getActorList = async () => {
-    let res = await getActorById(
-        {
-            movieTvId: props.routerParams.movieTvId,
-        },
-        props.routerParams.type
-    );
+    // TMDB 失败时返回错误体而非抛异常，必须校验，否则 res.cast.slice 会崩
+    let res;
+    try {
+        res = await getActorById(
+            {
+                movieTvId: props.routerParams.movieTvId,
+            },
+            props.routerParams.type
+        );
+    } catch (e) {
+        console.warn('[actor-list] 获取演职员失败:', e?.message);
+        return;
+    }
+    if (!res || res.status_code || !Array.isArray(res.cast) || !Array.isArray(res.crew)) {
+        console.warn('[actor-list] 演职员数据无效:', res?.status_message || res);
+        return;
+    }
     actorList.value = res.cast.slice(0, 20);
     let director = res.crew.find(v => v.known_for_department === 'Directing')
     if (director) {

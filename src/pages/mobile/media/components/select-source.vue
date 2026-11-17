@@ -9,7 +9,8 @@
                         <div :class="['list-item', item.list.length == 1 ? 'list-one' : '']" v-for="vitem in item.list"
                             :key="vitem.name" @click="handleSelect(item, vitem)">
                             <div class="list-item-img">
-                                <image :src="item.img"  />
+                                <image v-if="getSourceIcon(item.type).kind === 'image'" :src="getSourceIcon(item.type).value" />
+                                <wil-icon v-else :name="getSourceIcon(item.type).value" class="list-item-glyph" />
                             </div>
                             <div class="list-item-name">{{ vitem.name }}</div>
                         </div>
@@ -35,6 +36,8 @@ import { useI18n } from 'vue-i18n'
 import { loginUser, get189Folder, getQuarkFolder, getWopanFolder, get139Folder } from "@/utils/common";
 import { useThemeColors } from '@/hooks/useThemeColors'
 import { useThemeClass } from '@/hooks/useThemeClass'
+import wilIcon from '@/components/common/wil-icon/index.vue'
+import { getSourceIcon } from '@/utils/sources/sourceIcon'
 
 const { t } = useI18n()
 const emits = defineEmits(['openFolder'])
@@ -216,6 +219,15 @@ const handleSelect = async (item, vitem) => {
                         // align-items: center;
                         // justify-content: center;
                         position: relative;
+
+                        .list-item-glyph {
+                            font-size: 40rpx;
+                            color: var(--app-icon-strong);
+                            position: absolute;
+                            left: 50%;
+                            top: 40%;
+                            transform: translate(-50%, 0);
+                        }
 
                         image {
                             width: 40rpx;

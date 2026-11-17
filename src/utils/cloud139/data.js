@@ -112,14 +112,16 @@ export const ensurePersonalCloudHost = async credential => {
 
 /**
  * 个人云签名请求（host 就绪 + Authorization + mcloud-sign）
+ * @param {object} [opts] { timeout } 刮削时用来取消超时限制
  */
-export const personalPost139 = async (credential, pathname, data) => {
+export const personalPost139 = async (credential, pathname, data, opts = {}) => {
   const host = await ensurePersonalCloudHost(credential)
   return request139Cloud({
     pathname,
     data,
     authorization: credential.authorization,
     personalHost: host,
+    timeout: opts.timeout,
   })
 }
 
@@ -127,8 +129,9 @@ export const personalPost139 = async (credential, pathname, data) => {
  * 文件列表（对齐 Go personalGetFiles：/file/list 游标分页）
  * 映射为 fileListAO 结构（对齐天翼云盘/联通云盘，上层零改动）
  * @param {string} fileId 目录 id（根目录传 'root'）
+ * @param {object} [opts] { timeout } 刮削时用来取消超时限制，每一页都用同一个值
  */
-export const list139Files = async (fileId, credential) => {
+export const list139Files = async (fileId, credential, opts = {}) => {
   const valid = await ensureSession139(credential)
   let pageCursor = ''
   const all = []
@@ -139,7 +142,7 @@ export const list139Files = async (fileId, credential) => {
       orderDirection: 'DESC',
       pageInfo: { pageCursor, pageSize: 100 },
       parentFileId: fileId,
-    })
+    }, opts)
     const items = body?.data?.items || []
     all.push(...items)
     pageCursor = body?.data?.nextPageCursor || ''

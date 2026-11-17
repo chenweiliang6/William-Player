@@ -5,10 +5,10 @@
         <div class="title-left">{{ t('video.relatedActors') }}</div>
         <div class="title-right">
           <div class="arrow-left" @click="slideActor('left')">
-            <img src="@/static/rect-leftblack.png" />
+            <wil-icon name="arrow-left-copy" :custom-color="props.iconTone === 'white' ? '#ffffff' : '#000000'" />
           </div>
           <div class="arrow-right" @click="slideActor('right')">
-            <img src="@/static/rect-leftblack.png" />
+            <wil-icon name="arrow-right" :custom-color="props.iconTone === 'white' ? '#ffffff' : '#000000'" />
           </div>
         </div>
       </div>
@@ -48,6 +48,7 @@ import { ref, onBeforeMount } from 'vue'
 import { handleSeasonName, debounce } from '@/utils/scrape'
 import * as CONFIG from '@/utils/config'
 import { useI18n } from 'vue-i18n'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 
 const { t } = useI18n()
 
@@ -57,6 +58,8 @@ const props = defineProps({
   imgData: { type: Object, default: {} },
   actorArr: { type: Array, default: [] },
   type: { type: String, default: 'normal' },
+  // 背景主色的明暗，决定箭头图标用白版还是黑版
+  iconTone: { type: String, default: 'black' },
 })
 const director = ref({})
 const actors = ref([])
@@ -99,13 +102,24 @@ const getActorById = (data, type) => {
   })
 }
 const getActorList = async () => {
-  let res = await getActorById(
-    {
-      movieTvId: props.routerParams.movieTvId,
-    },
-    props.routerParams.type
-  )
-  director.value = res?.crew[0] || {}
+  // TMDB 失败时返回错误体而非抛异常，必须校验，否则 res.cast.slice 会崩
+  let res
+  try {
+    res = await getActorById(
+      {
+        movieTvId: props.routerParams.movieTvId,
+      },
+      props.routerParams.type
+    )
+  } catch (e) {
+    console.warn('[actor-list] 获取演职员失败:', e?.message)
+    return
+  }
+  if (!res || res.status_code || !Array.isArray(res.cast)) {
+    console.warn('[actor-list] 演职员数据无效:', res?.status_message || res)
+    return
+  }
+  director.value = res?.crew?.[0] || {}
   actors.value = res.cast.slice(0, 20)
   if (director.value.name) {
     director.value.role = t('video.director')
@@ -175,27 +189,6 @@ onBeforeMount(() => {
 .actor-list {
   width: 100%;
 
-  .story-introduction {
-    margin-top: 50rpx;
-
-    .story-introduction-title {
-      font-size: 32rpx;
-      font-weight: bold;
-      color: #000;
-      padding-bottom: 20rpx;
-    }
-
-    .story-introduction-text {
-      display: -webkit-box;
-      -webkit-line-clamp: 3;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      font-size: 28rpx;
-      color: #000;
-    }
-  }
-
   .related-actors {
     margin-top: 50rpx;
 
@@ -208,7 +201,7 @@ onBeforeMount(() => {
       .title-left {
         font-size: 32rpx;
         font-weight: bold;
-        color: #000;
+        color: var(--content-text, #000);
       }
 
       .title-right {
@@ -219,15 +212,14 @@ onBeforeMount(() => {
           width: 56rpx;
           height: 56rpx;
           border-radius: 50%;
-          border: 2rpx solid #000;
+          border: 2rpx solid var(--content-border, #000);
           padding: 10rpx;
           cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
-          img {
-            width: 100%;
-            height: 100%;
+          .iconfont {
+            font-size: 32rpx;
           }
         }
 
@@ -235,17 +227,15 @@ onBeforeMount(() => {
           width: 56rpx;
           height: 56rpx;
           border-radius: 50%;
-          border: 2rpx solid #000;
+          border: 2rpx solid var(--content-border, #000);
           padding: 10rpx;
           margin-left: 24rpx;
           cursor: pointer;
           display: flex;
           align-items: center;
           justify-content: center;
-          img {
-            width: 100%;
-            height: 100%;
-            transform: rotate(180deg);
+          .iconfont {
+            font-size: 32rpx;
           }
         }
       }
@@ -278,7 +268,7 @@ onBeforeMount(() => {
 
           .item-name {
             font-size: 28rpx;
-            color: #000;
+            color: var(--content-text, #000);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -288,9 +278,9 @@ onBeforeMount(() => {
 
           .item-job {
             padding: 4rpx 6rpx;
-            border: 2rpx solid #000;
+            border: 2rpx solid var(--content-border, #000);
             font-size: 20rpx;
-            color: #000;
+            color: var(--content-text, #000);
             border-radius: 6rpx;
             height: 35rpx;
             box-sizing: border-box;
@@ -300,7 +290,7 @@ onBeforeMount(() => {
             height: 35rpx;
             line-height: 35rpx;
             font-size: 24rpx;
-            color: #000;
+            color: var(--content-text, #000);
             width: 100%;
             white-space: nowrap;
             overflow: hidden;
@@ -315,17 +305,17 @@ onBeforeMount(() => {
   .tip-footer {
     margin-top: 50rpx;
     padding-top: 20rpx;
-    border-top: 2rpx solid #000;
+    border-top: 2rpx solid var(--content-border, #000);
     width: 100%;
 
     .tip-footer-name {
       font-size: 24rpx;
-      color: #000;
+      color: var(--content-text, #000);
     }
 
     .tip-footer-webdav {
       font-size: 24rpx;
-      color: #000;
+      color: var(--content-text, #000);
       padding-top: 20rpx;
       word-break: break-all;
       /* 允许在任意字符间断行 */
@@ -333,7 +323,7 @@ onBeforeMount(() => {
 
     .tip-footer-timesize {
       font-size: 24rpx;
-      color: #000;
+      color: var(--content-text, #000);
       font-weight: bold;
       display: flex;
       align-items: center;

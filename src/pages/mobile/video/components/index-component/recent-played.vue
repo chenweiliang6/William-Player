@@ -12,7 +12,7 @@
       <scroll-view class="recent-played-list-scroll" :scroll-x="true" style="width: 100%" :enhanced="true"
         :showScrollbar="false">
         <div class="recent-played-list-movie">
-          <div class="recent-played-list-movie__item" v-for="item in scrollData" :key="item.name"
+          <div class="recent-played-list-movie__item" v-for="item in scrollData" :key="item.name + (item.type || '')"
             @click="toVideoPlayer(item)">
             <div class="recent-played-list-movie__item-img">
               <image :src="!props.isConnected && !item.loadImg ? emptyBg : setEmptyImg(item.poster)" @error="imgError(item)"
@@ -20,7 +20,7 @@
               <!-- <span style="color: red;font-size: 30px;">
                 {{ item.loadImg }}
               </span> -->
-              <image :src="playVideoButton" class="img-button"  />
+              <wil-icon name="icon_play" custom-color="#ffffff" class="img-button" />
               <span class="img-runtime">{{ handleSecond(item.initialTime) + '/' + (item.runtime || '00:00') }}</span>
               <div class="img-process"
                 :style="{ width: item.runtime ? (Number(item.initialTime) / (Number(parseTime(item.runtime)) * 0.6) + '%') : '0' }">
@@ -39,8 +39,8 @@
 
 <script setup>
 import { ref, watch } from "vue";
-import playVideoButton from "@/static/playVideo-button.png";
-import { handleSecond, parseTime, handleSeasonName } from "@/utils/scrape";
+import wilIcon from "@/components/common/wil-icon/index.vue";
+import { handleSecond, parseTime, handleSeasonName, getMovieTvData } from "@/utils/scrape";
 import { onShow } from "@dcloudio/uni-app";
 import emptyBg from "@/static/empty_bg.png";
 import { toStringfy } from "../../../mine/common";
@@ -131,7 +131,7 @@ const toVideoPlayer = async (item) => {
       });
     }
   } else if (item.type == "tv") {
-    let localMovieTvData = uni.getStorageSync("localMovieTvData") || {};
+    let localMovieTvData = getMovieTvData() || {};
     let nowTv = localMovieTvData.tv.find((i) => {
       return (
         i.source.some((v) => {
@@ -250,13 +250,11 @@ watch(
             overflow: hidden;
 
             .img-button {
-              width: 80rpx;
-              height: 80rpx;
+              font-size: 80rpx;
               position: absolute;
               left: 50%;
               top: 50%;
               transform: translate(-50%, -50%);
-              object-fit: cover;
             }
 
             .img-runtime {

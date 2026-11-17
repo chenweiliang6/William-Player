@@ -112,26 +112,78 @@ const generateRandomDigits = (length = 16) => {
   return Array.from({ length }, () => Math.floor(Math.random() * 10)).join('')
 }
 
-//webdav
-const getFolder = (data, webdavInfo) => {
-  return new Promise((resolve, reject) => {
-    uni.request({
-      url: webdavInfo.protocol + '://' + webdavInfo.address + ':' + webdavInfo.port + '/api/fs/list',
-      data: JSON.stringify({ ...data, page: 1, per_page: 1000, refresh: false }),
-      timeout: 10000,
-      method: 'POST',
-      header: {
-        Authorization: webdavInfo.token,
-        'Content-Type': 'application/json',
-      },
-      success: res => {
-        resolve(res.data)
-      },
-      fail: error => {
-        reject(error)
-      },
+//webdav（alist / openlist）
+//
+// 两个必须处理的 alist 特性：
+//   1. 业务错误也返回 HTTP 200，code/message 在 body 里。
+//      token 过期时 body = { code: 401, message: 'token is invalidated', data: null }，
+//      旧实现直接 resolve，上层拿到空 content 后"静默扫不出东西"，不报任何错。
+//   2. 单页最多 500 项，per_page 传再大也被截断。旧实现固定 page=1，
+//      超过 500 项的目录会静默丢文件。
+const WEBDAV_PAGE_SIZE = 500
+
+// opts.timeout：刮削链路会传一个近似无限的值（见 scrape/constants.js），
+// 不传时保持 10s 默认。分页循环的每一页都用同一个值。
+const getFolder = (data, webdavInfo, opts = {}) => {
+  const url = webdavInfo.protocol + '://' + webdavInfo.address + ':' + webdavInfo.port + '/api/fs/list'
+  const pageSize = Math.min(Number(data?.pageSize) || WEBDAV_PAGE_SIZE, WEBDAV_PAGE_SIZE)
+  // 调用方显式传 pageNum 表示自己控制分页，只取那一页；否则自动翻页拉全量
+  const autoPage = !data?.pageNum
+  const startPage = Number(data?.pageNum) || 1
+  const requestTimeout = opts.timeout ?? 10000
+
+  const fetchPage = page =>
+    new Promise((resolve, reject) => {
+      const payload = { ...data, page, per_page: pageSize, refresh: false }
+      delete payload.pageNum
+      delete payload.pageSize
+      uni.request({
+        url,
+        data: JSON.stringify(payload),
+        timeout: requestTimeout,
+        method: 'POST',
+        header: {
+          Authorization: webdavInfo.token,
+          'Content-Type': 'application/json',
+        },
+        success: res => {
+          const body = res.data
+          if (!body || typeof body !== 'object') {
+            reject(new Error('WebDAV 响应格式异常'))
+            return
+          }
+          if (body.code !== 200) {
+            const err = new Error(body.message || `WebDAV 请求失败（code ${body.code}）`)
+            err.code = body.code
+            err.isWebdavError = true
+            // 401 = token 失效，上层据此提示重新登录
+            err.tokenExpired = body.code === 401
+            reject(err)
+            return
+          }
+          resolve(body)
+        },
+        fail: error => {
+          reject(error)
+        },
+      })
     })
-  })
+
+  return (async () => {
+    const first = await fetchPage(startPage)
+    if (!autoPage) return first
+
+    const content = [...(first.data?.content || [])]
+    if (!first.data?.has_more) return first
+
+    const total = Number(first.data?.total) || 0
+    const pages = Number(first.data?.pages_total) || Math.ceil(total / pageSize)
+    for (let p = startPage + 1; p <= pages; p++) {
+      const next = await fetchPage(p)
+      content.push(...(next.data?.content || []))
+    }
+    return { ...first, data: { ...first.data, content, total: content.length, has_more: false } }
+  })()
 }
 
 //webdav获取视频链接
@@ -186,11 +238,11 @@ const loginUser = webdavInfo => {
 //凭证分流：条目含 sessionKey（189pc 账密登录）走新签名数据层，否则走旧 Cookie 体系
 import { list189Files, get189DownloadUrlNew, get189UserInfo } from '@/utils/cloud189/data.js'
 
-const legacyGet189Folder = (data, cookieInfo) => {
+const legacyGet189Folder = (data, cookieInfo, opts = {}) => {
   return httpRequest(`${CONFIG.Folder189Url}&folderId=${data.folderId}&pageNum=${data.pageNum || 1}&pageSize=${data.pageSize || 1000}`, {
     method: 'GET',
     header: build189Header(build189Cookie(cookieInfo), { signType: true }),
-    timeout: 3000,
+    timeout: opts.timeout ?? 3000,
   })
 }
 
@@ -221,8 +273,8 @@ const legacyGet189DownloadUrl = (data, cookieInfo) => {
   })
 }
 
-const get189Folder = (data, credential) =>
-  credential.sessionKey ? list189Files(data, credential) : legacyGet189Folder(data, credential)
+const get189Folder = (data, credential, opts = {}) =>
+  credential.sessionKey ? list189Files(data, credential, opts) : legacyGet189Folder(data, credential, opts)
 
 //天翼云盘获取视频链接
 const get189VideoUrl = (data, credential) =>
@@ -237,11 +289,11 @@ const get189DownloadUrl = (data, credential) =>
   credential.sessionKey ? get189DownloadUrlNew(data, credential) : legacyGet189DownloadUrl(data, credential)
 
 //夸克网盘
-const getQuarkFolder = (data, cookieInfo) => {
+const getQuarkFolder = (data, cookieInfo, opts = {}) => {
   return httpRequest(`${CONFIG.QuarkFolderUrl}&pdir_fid=${data.fid}&_page=${data.pageNum || 1}&_size=${data.pageSize || 1000}`, {
     method: 'GET',
     header: buildQuarkHeader(cookieInfo.Cookie),
-    timeout: 3000,
+    timeout: opts.timeout ?? 3000,
   })
 }
 
@@ -278,7 +330,7 @@ const getQuarkUser = obj => {
 import { listWopanFiles, getWopanDownloadUrl, getWopanUser } from '@/utils/wopan/data.js'
 
 //联通云盘获取文件列表（fileListAO 结构对齐天翼云盘，上层零改动）
-const getWopanFolder = (data, credential) => listWopanFiles(data.folderId, credential)
+const getWopanFolder = (data, credential, opts = {}) => listWopanFiles(data.folderId, credential, opts)
 
 //联通云盘获取视频播放/下载链接
 const getWopanVideoUrl = (data, credential) => getWopanDownloadUrl(data.folderFileId, credential)
@@ -287,7 +339,7 @@ const getWopanVideoUrl = (data, credential) => getWopanDownloadUrl(data.folderFi
 import { list139Files, get139DownloadUrl } from '@/utils/cloud139/data.js'
 
 //移动云盘获取文件列表（fileListAO 结构对齐天翼云盘，上层零改动）
-const get139Folder = (data, credential) => list139Files(data.folderId, credential)
+const get139Folder = (data, credential, opts = {}) => list139Files(data.folderId, credential, opts)
 
 //移动云盘获取视频播放/下载链接
 const get139VideoUrl = (data, credential) => get139DownloadUrl(data.folderFileId, credential)
@@ -417,4 +469,8 @@ export {
   getCutContent,
   toSendEmail,
   getAppLatestVersion,
+  // 下载器 v2 需要夸克直链的请求头（下载内核不会自己补 Cookie）
+  buildQuarkHeader,
+  build189Header,
+  build189Cookie,
 }

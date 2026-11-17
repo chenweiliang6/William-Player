@@ -41,7 +41,7 @@
                     "android.useAndroidX" : "true",
                     "android.enableJetifier" : "true"
                 },
-                "forceDarkAllowed": false,
+                "forceDarkAllowed" : false,
                 "permissions" : [
                     "<uses-feature android:name=\"android.hardware.camera\"/>",
                     "<uses-feature android:name=\"android.hardware.camera.autofocus\"/>",
@@ -80,7 +80,7 @@
                     "<uses-permission android:name=\"android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS\"/>",
                     "<uses-permission android:name=\"android.permission.REORDER_TASKS\"/>"
                 ],
-                "abiFilters" : []
+                "abiFilters" : [ "arm64-v8a" ]
             },
             /* ios打包配置 */
             "ios" : {

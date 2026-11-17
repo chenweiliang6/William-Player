@@ -3,7 +3,7 @@
         <div class="popover"
             :style="{ left: positionObj.left, top: positionObj.top, background: props.background, width: props.width }">
             <div class="popover-item" v-for="item in props.options" :key="item.label" @click="clickItem(item)">
-                <image :src="item.icon" v-if="item.icon"  />
+                <wil-icon v-if="item.icon" :name="item.icon" :custom-color="item.iconColor" class="popover-item__icon" />
                 <span :style="{ color: item.color }">{{ item.label }}</span>
             </div>
         </div>
@@ -11,7 +11,7 @@
     <div class="popover-overlay" v-show="showPopover" @click="closePopover"></div>
     <div class="seat-popover" ref="seat_popover">
         <div class="popover-item" v-for="item in props.options" :key="item.label">
-            <image :src="item.icon" v-if="item.icon"  />
+            <wil-icon v-if="item.icon" :name="item.icon" :custom-color="item.iconColor" class="popover-item__icon" />
             <span :style="{ color: item.color }">{{ item.label }}</span>
         </div>
     </div>
@@ -19,6 +19,7 @@
 
 <script setup>
 import { watch, ref, onMounted, onBeforeUnmount } from 'vue'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 
 const props = defineProps({
     options: { type: Array, default: [] },
@@ -152,9 +153,8 @@ onBeforeUnmount(() => {
         padding: 8px 12px;
         cursor: pointer;
 
-        image {
-            width: 20px;
-            height: 20px;
+        .popover-item__icon {
+            font-size: 20px;
             display: block;
         }
 
@@ -203,9 +203,8 @@ onBeforeUnmount(() => {
         padding: 8px 12px;
         cursor: pointer;
 
-        image {
-            width: 20px;
-            height: 20px;
+        .popover-item__icon {
+            font-size: 20px;
             display: block;
         }
 

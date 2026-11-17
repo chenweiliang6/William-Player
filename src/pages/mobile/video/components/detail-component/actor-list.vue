@@ -62,13 +62,25 @@ const handleSize = (size) => {
   return formatted + " " + sizes[i];
 };
 const getActorList = async () => {
-  let res = await getActorById(
-    {
-      movieTvId: props.routerParams.movieTvId,
-    },
-    props.routerParams.type
-  );
-  director.value = res.crew[0] || {};
+  // TMDB 失败时不抛异常而是返回错误体，必须校验 crew/cast 是否存在，
+  // 否则 res.cast.slice 会直接抛 TypeError 把整个详情页打断。
+  let res;
+  try {
+    res = await getActorById(
+      {
+        movieTvId: props.routerParams.movieTvId,
+      },
+      props.routerParams.type
+    );
+  } catch (e) {
+    console.warn('[actor-list] 获取演职员失败:', e?.message);
+    return;
+  }
+  if (!res || res.status_code || !Array.isArray(res.cast)) {
+    console.warn('[actor-list] 演职员数据无效:', res?.status_message || res);
+    return;
+  }
+  director.value = res.crew?.[0] || {};
   actors.value = res.cast.slice(0, 20);
 };
 
@@ -103,7 +115,7 @@ onBeforeMount(() => {
     .story-introduction-title {
       font-size: 32rpx;
       font-weight: bold;
-      color: var(--app-text-primary);
+      color: var(--content-text, var(--app-text-primary));
       padding-bottom: 20rpx;
     }
 
@@ -114,7 +126,7 @@ onBeforeMount(() => {
       overflow: hidden;
       text-overflow: ellipsis;
       font-size: 28rpx;
-      color: var(--app-text-primary);
+      color: var(--content-text, var(--app-text-primary));
     }
   }
 
@@ -124,7 +136,7 @@ onBeforeMount(() => {
     .related-actors-title {
       font-size: 32rpx;
       font-weight: bold;
-      color: var(--app-text-primary);
+      color: var(--content-text, var(--app-text-primary));
       padding-bottom: 20rpx;
     }
 
@@ -154,7 +166,7 @@ onBeforeMount(() => {
 
           .item-name {
             font-size: 28rpx;
-            color: var(--app-text-primary);
+            color: var(--content-text, var(--app-text-primary));
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -164,9 +176,9 @@ onBeforeMount(() => {
 
           .item-job {
             padding: 4rpx 6rpx;
-            border: 2rpx solid var(--app-border-strong);
+            border: 2rpx solid var(--content-border, var(--app-border-strong));
             font-size: 20rpx;
-            color: var(--app-text-tertiary);
+            color: var(--content-text-secondary, var(--app-text-tertiary));
             border-radius: 6rpx;
             height: 35rpx;
             box-sizing: border-box;
@@ -176,7 +188,7 @@ onBeforeMount(() => {
             height: 35rpx;
             line-height: 35rpx;
             font-size: 24rpx;
-            color: var(--app-text-tertiary);
+            color: var(--content-text-secondary, var(--app-text-tertiary));
             width: 100%;
             white-space: nowrap;
             overflow: hidden;
@@ -191,17 +203,17 @@ onBeforeMount(() => {
   .tip-footer {
     margin-top: 50rpx;
     padding-top: 20rpx;
-    border-top: 2rpx solid var(--app-border-strong);
+    border-top: 2rpx solid var(--content-border, var(--app-border-strong));
     width: 100%;
 
     .tip-footer-name {
       font-size: 24rpx;
-      color: var(--app-text-tertiary);
+      color: var(--content-text-secondary, var(--app-text-tertiary));
     }
 
     .tip-footer-webdav {
       font-size: 24rpx;
-      color: var(--app-text-tertiary);
+      color: var(--content-text-secondary, var(--app-text-tertiary));
       padding-top: 20rpx;
       word-break: break-all;
       /* 允许在任意字符间断行 */
@@ -209,7 +221,7 @@ onBeforeMount(() => {
 
     .tip-footer-timesize {
       font-size: 24rpx;
-      color: var(--app-text-placeholder);
+      color: var(--content-text-tertiary, var(--app-text-placeholder));
       font-weight: bold;
       display: flex;
       align-items: center;

@@ -25,10 +25,11 @@
 </template>
 
 <script setup>
+import { getMovieTvData } from '@/utils/scrape'
 import { nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { onShow } from '@dcloudio/uni-app'
-import { classifyList } from '@/utils/scrape.js'
+import { classifyList } from '@/utils/scrape'
 
 const { t } = useI18n()
 
@@ -36,6 +37,10 @@ const props = defineProps({
   focusModel: { type: String, default: '' },
   isFocus: { type: Boolean, default: false },
   offsetTop: { type: Number, default: 0 },
+  // 上移目标：最后一个可见的分类分区（父组件按焦点序列算好）
+  prevFocus: { type: String, default: '' },
+  // 库内容版本号：刮削边刮边显示时类型卡片也要跟着增长
+  revision: { type: Number, default: 0 },
 })
 
 const emits = defineEmits(['setFocus'])
@@ -53,14 +58,15 @@ const gridPx = ref(0)
 const getGenre = () => {
   let idArr = []
   listData.value = []
-  let movieTvData = uni.getStorageSync('localMovieTvData') || {}
-  movieTvData.movie?.forEach(item => {
-    if (item.genre_ids) {
-      idArr.push(...item.genre_ids)
-    }
-  })
-  movieTvData.tv?.forEach(item => {
-    if (item.genre_ids) {
+  let movieTvData = getMovieTvData() || {}
+  // 遍历全部分区的条目：动漫/综艺/纪录片里的片子也有 genre，
+  // 只统计 movie/tv 两桶会让「类型」卡片明显偏少
+  const allItems = Object.values(movieTvData.byCategory || {}).flat()
+  const source = allItems.length
+    ? allItems
+    : [...(movieTvData.movie || []), ...(movieTvData.tv || [])]
+  source.forEach(item => {
+    if (Array.isArray(item.genre_ids)) {
       idArr.push(...item.genre_ids)
     }
   })
@@ -76,17 +82,9 @@ const getGenre = () => {
   })
 }
 
-const getUpDown = direction => {
-  if (direction === 'up') {
-    let localMovieTvData = uni.getStorageSync('localMovieTvData')
-    if (localMovieTvData?.tv?.length) {
-      return 'hxTv'
-    }
-    if (localMovieTvData?.movie?.length) {
-      return 'hxMovie'
-    }
-  }
-}
+// 上移目标：最后一个可见的分类分区（父组件按焦点序列算好），
+// 不再按 tv→movie 顺序硬编码
+const getUpDown = direction => (direction === 'up' ? props.prevFocus || '' : '')
 
 const evtMove = keyCode => {
   if (keyCode === 'KeyRight') {
@@ -154,6 +152,15 @@ watch(
     } else {
       tabIndex.value = -1
     }
+  }
+)
+
+// 刮削边刮边显示：库增长时重新统计类型卡片
+watch(
+  () => props.revision,
+  () => {
+    getGenre()
+    if (tabIndex.value > listData.value.length - 1) tabIndex.value = -1
   }
 )
 onShow(() => {

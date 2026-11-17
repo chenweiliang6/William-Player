@@ -1,9 +1,9 @@
 <template>
   <div class="home-navbar">
     <div class="home-navbar-container">
-      <img src="@/static/search-black.png" @click="toSearch" />
-      <img src="@/static/refresh-black.png" :class="['home-navbar-container__refresh', loading ? 'refresh-rotate' : '']" @click="showProgress" v-if="props.showRefresh" />
-      <img src="@/static/jia-black.png" @click="toSourceList" />
+      <wil-icon name="sousuo" custom-color="#000015" class="navbar-icon" @click="toSearch" />
+      <wil-icon name="shuaxin" custom-color="#000015" :class="['navbar-icon', 'home-navbar-container__refresh', loading ? 'refresh-rotate' : '']" @click="showProgress" v-if="props.showRefresh" />
+      <wil-icon name="jia" custom-color="#000015" class="navbar-icon" @click="toSourceList" />
     </div>
     <!-- 使用teleport挂载到body去 -->
     <template v-if="showPopover && props.showRefresh">
@@ -17,6 +17,7 @@
         <div class="popover-title">
           <div class="popover-title-left">
             <span>{{ popoverData.title }}</span>
+            <span class="popover-title-left__button" v-if="loading" @click="toCancel">{{ t('video.cancelScan') }}</span>
           </div>
         </div>
         <div class="popover-list">
@@ -37,6 +38,8 @@ import dayjs from 'dayjs'
 import { onUnload } from '@dcloudio/uni-app'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { findActiveSource } from '@/utils/tools'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 
 const { t } = useI18n()
 
@@ -48,7 +51,7 @@ const props = defineProps({
   showRefresh: { type: Boolean, default: true },
   isEmby: { type: Boolean, default: false },
 })
-const emits = defineEmits(['refresh'])
+const emits = defineEmits(['refresh', 'pause'])
 
 const loading = ref(false) //是否正在旋转，刮削中
 const showPopover = ref(false) //是否显示蓝色的框，用来显示刮削到多少部影片
@@ -83,7 +86,7 @@ const toSourceList = () => {
 const judgeSelect = () => {
   let sourceList = uni.getStorageSync('sourceList')
   selectType.value = sourceList.find(item => {
-    let select = item.list.find(i => i.active)
+    let select = findActiveSource(item.list)
     if (select) {
       selectMedia.value = select
       return true
@@ -99,8 +102,16 @@ const showProgress = () => {
   timer1.value = null
   clearTimeout(timer2.value)
   timer2.value = null
+  // 刮削进行中：直接展开弹层，取消按钮此时一定可见
   if (loading.value) {
     showPopover.value = true
+    isShowPopover.value = true
+    return
+  }
+  judgeSelect()
+  // 没有启用的源时 selectType 为 undefined，继续走下去会在下面 selectType.value.type 抛错
+  if (!selectType.value?.type) {
+    uni.showToast({ title: t('video.noActiveSource'), icon: 'none' })
     return
   }
   popoverData.value.title = t('video.scanning')
@@ -111,22 +122,18 @@ const showProgress = () => {
   ]
   showPopover.value = true
   isShowPopover.value = true
-  judgeSelect()
   if (selectType.value.type == 'Emby') {
     showPopover.value = false
     isShowPopover.value = false
   }
   emits('refresh')
-  timer1.value = setTimeout(() => {
-    //刮削时间到了60s那就自动暂停
-    isShowPopover.value = false
-    setTimeout(() => {
-      showPopover.value = false
-    }, 300)
-    clearTimeout(timer1.value)
-    timer1.value = null
-    emits('pause')
-  }, 60000)
+  // 原先这里是 60 秒后自动 emits('pause')。自动「暂停」语义不对 ——
+  // 取消应该由用户决定，而且现在取消真的能停下，不需要靠超时兜底。
+}
+
+//取消本次刮削
+const toCancel = () => {
+  emits('pause')
 }
 
 const getScrollTop = () => {
@@ -160,7 +167,16 @@ watch(
   val => {
     loading.value = val
     if (!val) {
-      popoverData.value.title = t('video.completedSyncVideos', { count: props.refreshData.success || 0 })
+      // 取消结束时，标题要说明是哪种结束，而不是一律报「已完成」
+      const reason = props.refreshData?.cancelReason
+      if (reason === 'user') {
+        // 取消后已刮到的批次会保留，文案要说清楚
+        popoverData.value.title = t('video.scanCancelledKeepPartial')
+      } else if (reason === 'tmdb') {
+        popoverData.value.title = t('video.tmdbUnavailable')
+      } else {
+        popoverData.value.title = t('video.scanCompleted')
+      }
       timer2.value = setTimeout(() => {
         isShowPopover.value = false
         setTimeout(() => {
@@ -220,9 +236,8 @@ defineExpose({
   top: 50rpx;
 
   .home-navbar-container {
-    img {
-      width: 40rpx;
-      height: 40rpx;
+    .navbar-icon {
+      font-size: 40rpx;
       cursor: pointer;
       margin-left: 24rpx;
 

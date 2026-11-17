@@ -23,9 +23,10 @@
 </template>
 
 <script setup>
+import { getMovieTvData } from '@/utils/scrape'
 import { ref, watch } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { classifyList } from '@/utils/scrape.js'
+import { classifyList } from '@/utils/scrape'
 import emptyBg from '@/static/empty_bg.png'
 import { useI18n } from 'vue-i18n'
 import { useLocaleStore } from '@/stores/locale'
@@ -34,6 +35,8 @@ const { t } = useI18n()
 const localeStore = useLocaleStore()
 const props = defineProps({
   isConnected: { type: Boolean, default: false }, //手机是否连接网络
+  // 库内容版本号：刮削边刮边显示时类型卡片也要跟着增长
+  revision: { type: Number, default: 0 },
 })
 
 const listData = ref([])
@@ -45,16 +48,15 @@ const lineHeight = ref('')
 const getGenre = () => {
   let idArr = []
   listData.value = []
-  let movieTvData = uni.getStorageSync('localMovieTvData') || {}
-  movieTvData.movie?.forEach(item => {
-    if (item.genre_ids) {
-      idArr.push(...item.genre_ids)
-    }
-  })
-  movieTvData.tv?.forEach(item => {
-    if (item.genre_ids) {
-      idArr.push(...item.genre_ids)
-    }
+  const movieTvData = getMovieTvData() || {}
+  // 遍历全部分区的条目：动漫/综艺/纪录片里的片子也有 genre，
+  // 只统计 movie/tv 两桶会让「类型」卡片明显偏少
+  const allItems = Object.values(movieTvData.byCategory || {}).flat()
+  const source = allItems.length
+    ? allItems
+    : [...(movieTvData.movie || []), ...(movieTvData.tv || [])]
+  source.forEach(item => {
+    if (Array.isArray(item.genre_ids)) idArr.push(...item.genre_ids)
   })
 
   idArr = [...new Set(idArr)]
@@ -100,6 +102,14 @@ onShow(() => {
 
 watch(
   () => localeStore.locale,
+  () => {
+    getGenre()
+  }
+)
+
+// 刮削边刮边显示：库增长时重新统计类型卡片
+watch(
+  () => props.revision,
   () => {
     getGenre()
   }

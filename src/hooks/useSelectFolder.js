@@ -1,9 +1,6 @@
 import { ref, defineEmits, unref } from 'vue'
 import { get189Folder, getQuarkFolder, getWopanFolder, get139Folder, getWebDAVUrl, get189DownloadUrl, getQuarkVideoUrl } from '@/utils/common.js'
-import Folder from '@/static/folder.png'
-import videoPlayer from '@/static/video-player.png'
-import photoIcon from '@/static/photo-icon.png'
-import fileIcon from '@/static/file-icon.png'
+import { getFileIcon, getFileIconName } from '@/utils/sources/fileIcon'
 import { onBeforeMount } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -249,20 +246,17 @@ export function useSelectFolder({ selectType, selectMedia, result, title, catalo
       })
     }
   }
-  const setImg = item => {
-    if (item.type == '1') {
-      return Folder
-    } else {
-      let videoFormat = ['mp4', 'mkv', 'm2ts', 'avi', 'mov', 'ts', 'm3u8', 'iso']
-      let imgFormat = ['jpg', 'png', 'jpeg', 'raw', 'webp', 'gif']
-      if (videoFormat.some(i => item.name.includes(i))) {
-        return videoPlayer
-      } else if (imgFormat.some(i => item.name.includes(i))) {
-        return photoIcon
-      } else {
-        return fileIcon
-      }
-    }
+  /**
+   * 取列表项图标描述。
+   *
+   * 原先是直接返回 png 路径，现在按 kind 区分：
+   * kind 为 glyph 时 value 是 iconfont 字形名，为 image 时是图片地址
+   * （图片文件带网盘缩略图的情况仍走图片）。
+   */
+  const fileIconOf = item => {
+    const info = getFileIconName(item)
+    if (!info) return { kind: 'image', value: getFileIcon(item) }
+    return { kind: 'glyph', value: info.glyph, color: info.color }
   }
   //确认选择该路径
   const confirm = () => {
@@ -328,7 +322,7 @@ export function useSelectFolder({ selectType, selectMedia, result, title, catalo
     toBack,
     getFileList,
     clickCell,
-    setImg,
+    fileIconOf,
     confirm,
   }
 }

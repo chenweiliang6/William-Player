@@ -136,7 +136,7 @@
 
 <script>
 import { getMovieTvById } from '@/utils/common.js'
-import { generateChineseNumberMapping } from '@/utils/scrape.js'
+import { generateChineseNumberMapping } from '@/utils/scrape'
 import posterEmpty from '@/static/poster-empty.png'
 import { IMG_DOMAIN } from '@/utils/config'
 

@@ -14,15 +14,15 @@
           <div class="detail-info-right__name">{{ imgData.title }}</div>
           <div class="detail-info-right__mid">
             <div class="mid-score">
-              <img src="@/static/star-fill.png" />
+              <wil-icon name="shoucang" custom-color="#f4bc22" />
               <span>{{ imgData.score }}</span>
             </div>
             <div class="mid-date">
-              <img src="@/static/date-icon.png" />
+              <wil-icon name="rili" custom-color="#c2c5c6" />
               <span>{{ imgData.releaseTime }}</span>
             </div>
             <div class="mid-runtime">
-              <img src="@/static/clock-icon.png" v-if="route.query.type == 'movie'" />
+              <wil-icon name="shijian" custom-color="#c2c5c6" v-if="route.query.type == 'movie'" />
               <span>{{ imgData.runtime }}</span>
             </div>
           </div>
@@ -33,12 +33,12 @@
           <div class="detail-info-right__button">
             <nut-button custom-color="#090909" @click="clickPlayButton">
               <template #icon>
-                <image src="@/static/play.png" />
+                <wil-icon name="icon_play" custom-color="#ffffff" />
               </template>
               <span>{{ buttonText }}</span>
             </nut-button>
             <div class="button-more">
-              <img src="@/static/gengduo-white.png" />
+              <wil-icon name="gengduo" custom-color="#ffffff" />
             </div>
           </div>
           <div class="detail-info-right__overview">
@@ -53,10 +53,10 @@
         <div class="detail-container-tabs" v-if="route.query.type === 'tv'">
           <div class="detail-container-tabs__arrow">
             <div class="arrow-left" @click="slideTv('left')">
-              <img src="@/static/rect-leftblack.png" />
+              <wil-icon name="arrow-left-copy" custom-color="#000000" />
             </div>
             <div class="arrow-right" @click="slideTv('right')">
-              <img src="@/static/rect-leftblack.png" />
+              <wil-icon name="arrow-right" custom-color="#000000" />
             </div>
           </div>
         </div>
@@ -73,7 +73,7 @@
           >
             <div class="tv-list-item" v-for="(item, index) in tvList" :id="'name' + (index + 1)" :key="item.name" @click="toPlayVideo(item, index)">
               <div class="item-img" :style="{ backgroundImage: `url(${item.poster})` }">
-                <img src="@/static/playVideo-button.png" />
+                <wil-icon name="icon_play" custom-color="#ffffff" class="item-img-play" />
                 <span class="item-img-runtime" v-if="item.runtime">{{ item.runtime }}</span>
                 <div
                   class="item-img-process"
@@ -122,6 +122,7 @@ import { judgeSelect } from '@/utils/tools'
 import { ipc } from '@/utils/ipcRenderer'
 import { ipcApiRoute } from '@/utils/ipcApiRoute'
 import actorList from '../home/components/actor-list.vue'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -501,9 +502,8 @@ onShow(() => {
             font-size: 30rpx;
             color: #000;
 
-            img {
-              width: 40rpx;
-              height: 40rpx;
+            .iconfont {
+              font-size: 40rpx;
             }
           }
 
@@ -514,9 +514,8 @@ onShow(() => {
             color: #000;
             margin-left: 24rpx;
 
-            img {
-              width: 40rpx;
-              height: 40rpx;
+            .iconfont {
+              font-size: 40rpx;
             }
           }
 
@@ -527,9 +526,8 @@ onShow(() => {
             display: flex;
             align-items: center;
 
-            img {
-              width: 40rpx;
-              height: 40rpx;
+            .iconfont {
+              font-size: 40rpx;
             }
           }
         }
@@ -587,9 +585,8 @@ onShow(() => {
             margin-left: 24rpx;
             cursor: pointer;
 
-            img {
-              width: 50rpx;
-              height: 50rpx;
+            .iconfont {
+              font-size: 50rpx;
             }
           }
         }
@@ -796,9 +793,8 @@ onShow(() => {
               position: relative;
               overflow: hidden;
 
-              img {
-                width: 60rpx;
-                height: 60rpx;
+              .item-img-play {
+                font-size: 60rpx;
                 position: absolute;
                 left: 50%;
                 top: 50%;

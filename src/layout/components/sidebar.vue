@@ -16,7 +16,7 @@
     </div>
     <div class="sidebar-list" ref="sidebar_list">
       <div :class="['sidebar-list-item', item.active ? 'sidebar-list-active' : '']" v-for="item in sidebarList" :key="item.path" @click="changeTab(item)">
-        <img :src="item.active ? item.activeIcon : item.icon" />
+        <wil-icon :name="item.icon" :class="item.active ? 'icon-brand' : 'icon-theme'" />
         <span>{{ item.name }}</span>
       </div>
       <div class="sidebar-list-line" :style="setActiveStyle()"></div>
@@ -27,15 +27,7 @@
 <script setup>
 import wilPopover from '@/components/electron/wil-popover/other.vue'
 import userInfoInner from './user-info.vue'
-import homeBlack from '@/static/home-black.png'
-// import homeGray from '@/static/home-gray.png'
-import homeOrange from '@/static/home-orange.png'
-import liveBlack from '@/static/live-black.png'
-import liveOrange from '@/static/live-orange.png'
-import chilunBlack from '@/static/chilun-black.png'
-import chilunOrange from '@/static/chilun-orange.png'
-import embyBlack from '@/static/emby-black.png'
-import embyOrange from '@/static/emby-orange.png'
+import wilIcon from '@/components/common/wil-icon/index.vue'
 import { ref, onMounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -50,10 +42,11 @@ const popoverVisible = ref(false)
 const activePath = ref(router.currentRoute.value.path || '/home')
 
 const getSidebarList = () => [
-  { name: t('pc.home'), icon: homeBlack, activeIcon: homeOrange, path: '/home' },
-  { name: t('pc.emby'), icon: embyBlack, activeIcon: embyOrange, path: '/emby' },
-  { name: t('navbar.live'), icon: liveBlack, activeIcon: liveOrange, path: '/live' },
-  { name: t('pc.settings'), icon: chilunBlack, activeIcon: chilunOrange, path: '/settings' },
+  { name: t('pc.home'), icon: 'shouye', path: '/home' },
+  { name: t('navbar.resourceLibrary'), icon: 'ziyuanku', path: '/resource-library' },
+  { name: t('pc.emby'), icon: 'emby', path: '/emby' },
+  { name: t('navbar.live'), icon: 'zhibolive_tv', path: '/live' },
+  { name: t('pc.settings'), icon: 'shezhi', path: '/settings' },
 ].map(item => ({ ...item, active: item.path === activePath.value }))
 
 const sidebarList = ref(getSidebarList())
@@ -146,6 +139,10 @@ watch(
       img {
         width: 50rpx;
         height: 50rpx;
+      }
+
+      .iconfont {
+        font-size: 50rpx;
       }
 
       span {

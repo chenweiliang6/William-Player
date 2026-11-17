@@ -21,6 +21,7 @@ import { useThemeColors } from '@/hooks/useThemeColors'
 import { useI18n } from 'vue-i18n'
 import { wopanLogin } from '@/utils/wopan/login.js'
 import { persistWopanToken } from '@/utils/wopan/store.js'
+import { openFolderPicker } from '@/utils/sources/picker'
 
 const { t } = useI18n()
 const themeClass = useThemeClass()
@@ -66,17 +67,16 @@ const formOptions = computed(() => {
 })
 
 // 登录成功后的统一跳转（对齐 add-cloud189）
-const afterLoginSuccess = isNew => {
+const afterLoginSuccess = (isNew, loginName) => {
   uni.showToast({ title: isNew ? t('source.addAccountSuccess') : t('source.modifyAccountSuccess'), icon: 'none' })
-  if (isNew) {
-    setTimeout(() => {
-      uni.navigateTo({ url: '/pages/mobile/media/catelog-setting' })
-    }, 1800)
-  } else {
-    setTimeout(() => {
-      uni.navigateBack({ delta: 2 })
-    }, 1500)
-  }
+  // 新增和修改都进目录树：新增首次勾选，修改回填已导入目录后调整
+  setTimeout(() => {
+    openFolderPicker({
+      type: '联通云盘',
+      name: loginName || '',
+      mode: isNew ? 'add' : 'edit',
+    })
+  }, 1800)
 }
 
 const doLogin = async () => {
@@ -90,11 +90,11 @@ const doLogin = async () => {
       uni.showToast({ title: t('source.wopanSmsSent'), icon: 'none' })
       return
     }
-    const { isNew } = persistWopanToken(
+    const { isNew, loginName } = persistWopanToken(
       { phone, accessToken: result.accessToken, refreshToken: result.refreshToken },
       routerParams.value
     )
-    afterLoginSuccess(isNew)
+    afterLoginSuccess(isNew, loginName)
   } catch (e) {
     uni.showToast({ title: e.message || t('source.loginFailed'), icon: 'none' })
   } finally {
